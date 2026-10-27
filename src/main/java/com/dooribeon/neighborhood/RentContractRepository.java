@@ -36,7 +36,7 @@ public class RentContractRepository {
                 if (line.isBlank()) continue;
                 String[] c = line.split(",", -1);   // -1 : 빈 칸도 버리지 않고 유지
                 RentContract contract = new RentContract(
-                        c[0], c[1], c[2],
+                        c[0], DongNames.normalize(c[1]), c[2],
                         Double.parseDouble(c[3]),
                         c[4].isEmpty() ? null : Integer.parseInt(c[4]),
                         Integer.parseInt(c[5]),

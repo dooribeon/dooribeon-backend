@@ -1,0 +1,3 @@
+# 이 파일을 복사해서 application-local.yml 로 만들고 키를 넣으세요.
+kakao:
+  rest-key: YOUR_KAKAO_REST_API_KEY

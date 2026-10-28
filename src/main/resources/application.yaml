@@ -3,6 +3,24 @@ spring:
     name: dooribeon-backend
   profiles:
     active: local
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
+      fail-on-trailing-tokens: true
 
 server:
   port: 8080
+
+chatkhu:
+  base-url: ${CHATKHU_BASE_URL:https://factchat-cloud.mindlogic.ai/v1/gateway}
+  api-key: ${CHATKHU_API_KEY:}
+  model: ${CHATKHU_MODEL:claude-haiku-5-5}
+  connect-timeout: 10s
+  read-timeout: 90s
+
+kakao:
+  rest-key: ${KAKAO_REST_API_KEY:}
+  local:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    connect-timeout: 5s
+    read-timeout: 10s

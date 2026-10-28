@@ -1,0 +1,13 @@
+{
+  "conversationId": "00000000-0000-4000-8000-000000000001",
+  "conditions": {
+    "maxDeposit": 1000,
+    "maxRent": 50,
+    "places": []
+  },
+  "readyForRecommendation": true,
+  "issues": [],
+  "nextQuestion": null,
+  "notices": [],
+  "deletionConfirmation": null
+}

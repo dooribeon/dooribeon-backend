@@ -45,3 +45,9 @@ data/raw/
 
 ### macOS ###
 .DS_Store
+
+### 개인 실행 설정 추가 제외 ###
+.env.*
+!.env.example
+src/main/resources/application-local.properties
+src/main/resources/application-local.yaml

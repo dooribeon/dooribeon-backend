@@ -36,11 +36,21 @@ public class CandidateFilterService {
     private CandidateNeighborhood evaluate(Neighborhood n, Conditions conditions) {
         List<RentContract> contracts = rentContractRepository.findByNeighborhood(n.key());
 
-        int budgetCount = (int) contracts.stream()
+        List<RentContract> inBudget = contracts.stream()
                 .filter(c -> c.deposit() <= conditions.maxDeposit() && c.rent() <= conditions.maxRent())
-                .count();
+                .toList();
 
-        return new CandidateNeighborhood(n, contracts.size(), budgetCount, weightedDistanceKm(n, conditions));
+        return new CandidateNeighborhood(n, contracts.size(), inBudget.size(),
+                median(inBudget.stream().map(RentContract::deposit).toList()),
+                median(inBudget.stream().map(RentContract::rent).toList()),
+                weightedDistanceKm(n, conditions));
+    }
+
+    /** 중간값 — 정렬해서 가운데. 비어 있으면 0 */
+    private int median(List<Integer> values) {
+        if (values.isEmpty()) return 0;
+        List<Integer> sorted = values.stream().sorted().toList();
+        return sorted.get(sorted.size() / 2);
     }
 
     /** Σ (중요도 가중치 × 거점까지 직선거리) — 중요한 곳이 가까울수록 작아짐 */

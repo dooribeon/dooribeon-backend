@@ -16,6 +16,8 @@ public record RecommendResult(
         int totalContracts,         // 이 동네 월세 계약 수 (2025)
         int budgetContracts,        // 그중 예산 맞는 계약 수
         int budgetPercent,          // 예산 맞는 비율 (%)
+        int medianDeposit,          // 예산 안 계약 보증금 중간값 (만원)
+        int medianRent,             // 예산 안 계약 월세 중간값 (만원)
         List<PlaceRoute> routes     // 거점별 경로
 ) {
     /** 거점 1곳까지의 경로 */

@@ -106,6 +106,7 @@ public class RecommendService {
                 (int) Math.round(s.score()),
                 c.totalContracts(), c.budgetContracts(),
                 (int) Math.round(c.budgetRatio() * 100),
+                c.medianDeposit(), c.medianRent(),
                 s.routes());
     }
 

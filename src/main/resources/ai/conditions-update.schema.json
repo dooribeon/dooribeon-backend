@@ -1,0 +1,277 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "values",
+    "updatedFields",
+    "placeUpdates",
+    "resolvedIssueIds"
+  ],
+  "properties": {
+    "values": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxDeposit",
+        "maxRent",
+        "places",
+        "clarifications",
+        "unhandledRequests"
+      ],
+      "properties": {
+        "maxDeposit": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "정수만 허용. 최솟값 0, 최댓값 9007199254740991. 범위는 서버가 다시 검사한다."
+        },
+        "maxRent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "정수만 허용. 최솟값 0, 최댓값 9007199254740991. 범위는 서버가 다시 검사한다."
+        },
+        "places": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/extractedPlace"
+          }
+        },
+        "clarifications": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "field",
+              "reason"
+            ],
+            "properties": {
+              "field": {
+                "enum": [
+                  "maxDeposit",
+                  "maxRent",
+                  "budget",
+                  "conditions"
+                ],
+                "type": "string"
+              },
+              "reason": {
+                "enum": [
+                  "AMOUNT_UNIT_REQUIRED",
+                  "INTEGER_MANWON_REQUIRED",
+                  "NET_RENT_REQUIRED",
+                  "UNSUPPORTED_RENTAL_TYPE",
+                  "AMBIGUOUS_INPUT"
+                ],
+                "type": "string"
+              }
+            }
+          }
+        },
+        "unhandledRequests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "updatedFields": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "maxDeposit",
+          "maxRent"
+        ],
+        "type": "string"
+      }
+    },
+    "placeUpdates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "action",
+          "updatedFields",
+          "values"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "action": {
+            "enum": [
+              "UPDATE",
+              "REQUEST_DELETE"
+            ],
+            "type": "string"
+          },
+          "updatedFields": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "label",
+                "targetType",
+                "query",
+                "role",
+                "importance",
+                "transport",
+                "maxMinutes",
+                "frequency"
+              ],
+              "type": "string"
+            }
+          },
+          "values": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/extractedPlace"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "resolvedIssueIds": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "$defs": {
+    "extractedPlace": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "targetType",
+        "query",
+        "role",
+        "importance",
+        "importanceSpecified",
+        "transport",
+        "maxMinutes",
+        "frequency",
+        "frequencyUnclear"
+      ],
+      "properties": {
+        "label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "targetType": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "FIXED_PLACE",
+                "NEARBY_FACILITY"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "query": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "role": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "WORK",
+                "SCHOOL"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "importance": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "REQUIRED",
+                "HIGH",
+                "MEDIUM",
+                "LOW"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "importanceSpecified": {
+          "type": "boolean"
+        },
+        "transport": {
+          "anyOf": [
+            {
+              "type": "string",
+              "enum": [
+                "PUBLIC_TRANSIT",
+                "WALK"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxMinutes": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "정수만 허용. 최솟값 1, 최댓값 2147483647. 범위는 서버가 다시 검사한다."
+        },
+        "frequency": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "required": [
+            "period",
+            "count"
+          ],
+          "properties": {
+            "period": {
+              "enum": [
+                "WEEK",
+                "MONTH"
+              ],
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "description": "정수만 허용. 최솟값 1, 최댓값 2147483647. 범위는 서버가 다시 검사한다."
+            }
+          }
+        },
+        "frequencyUnclear": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,120 @@
+# 현재 공통 JSON용 요청 예제. AI·검색·경로 요청은 제공자 사용량이 발생할 수 있습니다.
+# 필요한 요청만 개별 실행합니다. 키는 서버 환경 변수에 등록합니다.
+@baseUrl = http://localhost:8080
+@conversationId = 응답의-conversationId
+@placeId = 응답의-conditions.places.id
+@searchId = 검색응답의-searchId
+@candidateId = 선택한-후보의-candidateId
+
+### 서버 상태 — 외부 호출 없음
+GET {{baseUrl}}/api/health
+
+### 예산만으로 봉천동 검사 — 외부 호출 없음, 순위 미적용
+POST {{baseUrl}}/api/recommend/check?neighborhoodKey=%EA%B4%80%EC%95%85%EA%B5%AC%20%EB%B4%89%EC%B2%9C%EB%8F%99
+Content-Type: application/json
+
+{"maxDeposit":1000,"maxRent":50,"places":[]}
+
+### 보증금 누락 검사 — 외부 호출 없음, INPUT_REQUIRED와 질문 기대
+POST {{baseUrl}}/api/recommend/check?neighborhoodKey=%EA%B4%80%EC%95%85%EA%B5%AC%20%EB%B4%89%EC%B2%9C%EB%8F%99
+Content-Type: application/json
+
+{"maxDeposit":null,"maxRent":50,"places":[]}
+
+### 소수 금액 검사 — 외부 호출 없음, 400 INVALID_JSON 기대
+POST {{baseUrl}}/api/recommend/check?neighborhoodKey=%EA%B4%80%EC%95%85%EA%B5%AC%20%EB%B4%89%EC%B2%9C%EB%8F%99
+Content-Type: application/json
+
+{"maxDeposit":1000,"maxRent":50.5,"places":[]}
+
+### 독립 조건 추출 — ChatKHU 호출, 금액은 정수 만원
+POST {{baseUrl}}/api/conditions/parse
+Content-Type: application/json
+
+{"text":"보증금은 천만 원 이하, 월세는 50만 원 이하야."}
+
+### 빈 문장 — 외부 호출 없이 400 오류
+POST {{baseUrl}}/api/conditions/parse
+Content-Type: application/json
+
+{"text":" "}
+
+### 대화 시작 — ChatKHU 호출, 응답의 conversationId를 위 변수에 복사
+POST {{baseUrl}}/api/conditions/conversations
+Content-Type: application/json
+
+{"text":"월세는 50만 원 이하로 찾고 있어."}
+
+### 보증금 답변 — ChatKHU 호출, 1000만원과 기존 월세 50만원 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"보증금은 천만 원까지야."}
+
+### 월세 수정 — ChatKHU 호출, 보증금 유지
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"월세는 40만 원으로 바꿔줘."}
+
+### 월세 비우기 — ChatKHU 호출, 준비 여부 false와 추가 질문 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"월세 금액은 지워줘."}
+
+### 단위 없는 금액 답변 — 위 월세 질문 직후 실행, 단위 확인 질문 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"1000000"}
+
+### 원 단위를 명시해 확인 완료 — ChatKHU 호출, 월세 100만원 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"월세는 100만 원이야."}
+
+### 특정 장소를 포함한 새 대화 — ChatKHU 호출, 위치 선택 전에는 준비 여부 false
+# 이 응답의 conversationId와 places[0].id로 위 두 변수를 교체합니다.
+POST {{baseUrl}}/api/conditions/conversations
+Content-Type: application/json
+
+{"text":"보증금은 천만 원 이하, 월세는 50만 원 이하야. 회사는 여의도역에 있고, 대중교통으로 편도 최대 40분까지 괜찮아."}
+
+### 장소 후보 검색 — 카카오 검색 호출, searchId와 선택할 candidateId 복사
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/places/{{placeId}}/search
+Content-Type: application/json
+
+{"query":"여의도역","type":"KEYWORD","page":1}
+
+### 사용자가 선택한 후보의 위치 반영 — 외부 호출 없음
+# 마지막 검색 결과는 5분 후 만료됩니다. 새 검색·조건 변경 후에는 이전 결과를 선택할 수 없습니다.
+PUT {{baseUrl}}/api/conditions/conversations/{{conversationId}}/places/{{placeId}}/location
+Content-Type: application/json
+
+{"searchId":"{{searchId}}","candidateId":"{{candidateId}}"}
+
+### 최대 편도시간 수정 — ChatKHU 호출, 선택 위치와 예산 유지 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"회사까지 최대 편도시간을 30분으로 바꿔줘."}
+
+### 장소 전체 삭제 요청 — ChatKHU 호출, 아직 삭제하지 않고 확인 안내 기대
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"회사 장소를 삭제하고 싶어."}
+
+### 삭제 취소 — 삭제 확인 대기 중 실행, 외부 호출 없음
+# 삭제하려면 이 요청 대신 응답의 deletionConfirmation.confirmationText를 text로 보내세요.
+POST {{baseUrl}}/api/conditions/conversations/{{conversationId}}/messages
+Content-Type: application/json
+
+{"text":"삭제 취소"}
+
+# 실제 장소가 있는 /api/recommend/check 요청은 완성된 conditions를 본문에 복사해 사용합니다.
+# 장소별 경로 조회가 발생합니다. 좌표는 검색·선택 응답의 실제 값을 사용합니다.
+# 기존 /api/recommend는 아직 예전 양식입니다. 동료의 공통 JSON 적용 후에는
+# examples/send_recommendation.py에 저장한 채팅 응답을 넣고 --send로 연결을 확인합니다.

@@ -1,0 +1,50 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "budget",
+    "needsAmountUnitConfirmation"
+  ],
+  "properties": {
+    "budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rentalType",
+        "jeonseMaxWon",
+        "depositMaxWon",
+        "monthlyRentMaxWon"
+      ],
+      "properties": {
+        "rentalType": {
+          "enum": [
+            "JEONSE",
+            "MONTHLY_RENT",
+            null
+          ]
+        },
+        "jeonseMaxWon": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "depositMaxWon": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "monthlyRentMaxWon": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      }
+    },
+    "needsAmountUnitConfirmation": {
+      "type": "boolean"
+    }
+  }
+}

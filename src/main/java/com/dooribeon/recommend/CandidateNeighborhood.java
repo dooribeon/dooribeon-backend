@@ -7,7 +7,7 @@ public record CandidateNeighborhood(
         Neighborhood neighborhood,
         int totalContracts,            // 전체 계약 수
         int budgetContracts,           // 그중 예산까지 맞는 계약 수
-        double weightedDistanceKm      // 방문 빈도 반영 직선거리
+        double weightedDistanceKm      // 중요도 반영 직선거리
 ) {
     /** 예산 맞는 계약 비율 (0 ~ 1) */
     public double budgetRatio() {

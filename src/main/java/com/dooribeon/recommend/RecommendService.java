@@ -1,8 +1,12 @@
 package com.dooribeon.recommend;
 
-import com.dooribeon.recommend.RecommendCondition.Place;
+import com.dooribeon.condition.Conditions;
+import com.dooribeon.condition.PlaceCondition;
+import com.dooribeon.condition.PlaceCondition.Importance;
+import com.dooribeon.condition.PlaceCondition.Transport;
 import com.dooribeon.recommend.RecommendResult.PlaceRoute;
 import com.dooribeon.route.KakaoRouteClient;
+import com.dooribeon.route.KakaoWalkClient;
 import com.dooribeon.route.RouteInfo;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,16 +26,17 @@ public class RecommendService {
 
     private final CandidateFilterService candidateFilterService;
     private final KakaoRouteClient kakaoRouteClient;
+    private final KakaoWalkClient kakaoWalkClient;
 
-    public List<RecommendResult> recommend(RecommendCondition condition) {
-        List<CandidateNeighborhood> candidates = candidateFilterService.findCandidates(condition);
+    public List<RecommendResult> recommend(Conditions conditions) {
+        List<CandidateNeighborhood> candidates = candidateFilterService.findCandidates(conditions);
 
         List<Scored> scored = new ArrayList<>();
         for (CandidateNeighborhood c : candidates) {
-            scoreNeighborhood(c, condition).ifPresent(scored::add);
+            scoreNeighborhood(c, conditions).ifPresent(scored::add);
         }
 
-        scored.sort(Comparator.comparingDouble(Scored::weeklyMinutes));
+        scored.sort(Comparator.comparingDouble(Scored::score));   // 점수 작은 순
 
         List<RecommendResult> results = new ArrayList<>();
         for (int i = 0; i < Math.min(TOP_N, scored.size()); i++) {
@@ -40,34 +45,57 @@ public class RecommendService {
         return results;
     }
 
-    /** 동네 1곳 : 거점마다 가장 빠른 경로를 찾고 일주일 이동 시간 계산. 경로 없는 거점이 있으면 제외 */
-    private Optional<Scored> scoreNeighborhood(CandidateNeighborhood c, RecommendCondition condition) {
+    /** 동네 1곳 : 거점마다 편도 시간 조회 → 시간 조건 검사 → 점수 합산. 경로가 없거나 시간 조건 밖이면 제외 */
+    private Optional<Scored> scoreNeighborhood(CandidateNeighborhood c, Conditions conditions) {
         var n = c.neighborhood();
         List<PlaceRoute> routes = new ArrayList<>();
-        double weekly = 0;
+        double score = 0;
 
-        for (Place p : condition.places()) {
-            Optional<RouteInfo> fastest = findFastestRoute(n.lat(), n.lng(), p.lat(), p.lng());
-            if (fastest.isEmpty()) {
-                log.info("경로 없음 : {} → {}", n.key(), p.label());
+        for (PlaceCondition p : conditions.places()) {
+            Transport transport = p.transport() != null ? p.transport() : Transport.PUBLIC_TRANSIT;
+            ImportancePolicy policy = ImportancePolicy.of(p.importance());
+
+            Optional<Trip> trip = findTrip(transport, n.lat(), n.lng(), p.location().lat(), p.location().lng());
+            if (trip.isEmpty()) {
+                log.info("경로 없음 : {} → {}", n.key(), name(p));
                 return Optional.empty();
             }
-            RouteInfo r = fastest.get();
-            routes.add(new PlaceRoute(p.label(), r.totalMinutes(), r.transfers()));
-            weekly += r.totalMinutes() * p.visitsPerWeek() * 2;   // 왕복
+
+            int minutes = trip.get().minutes();
+            if (!policy.allows(minutes, p.maxMinutes())) {
+                log.info("시간 초과 : {} → {} {}분 (기준 {}분 + 여유 {}분)",
+                        n.key(), name(p), minutes, p.maxMinutes(), policy.getExtraMinutes());
+                return Optional.empty();
+            }
+
+            routes.add(new PlaceRoute(name(p), Importance.valueOf(policy.name()), transport,
+                    minutes, trip.get().transfers()));
+            score += minutes * policy.getWeight();
         }
-        return Optional.of(new Scored(c, weekly, routes));
+        return Optional.of(new Scored(c, score, routes));
     }
 
-    /** 카카오가 준 경로 중 총 시간이 가장 짧은 것 */
-    private Optional<RouteInfo> findFastestRoute(double fromLat, double fromLng, double toLat, double toLng) {
+    /** 이동수단에 맞는 API로 편도 시간 조회. 대중교통은 가장 빠른 경로 */
+    private Optional<Trip> findTrip(Transport transport,
+                                    double fromLat, double fromLng, double toLat, double toLng) {
         try {
+            if (transport == Transport.WALK) {
+                return kakaoWalkClient.getWalk(fromLat, fromLng, toLat, toLng)
+                        .map(w -> new Trip(w.minutes(), 0));
+            }
             return kakaoRouteClient.getRoutes(fromLat, fromLng, toLat, toLng).stream()
-                    .min(Comparator.comparingInt(RouteInfo::totalMinutes));
+                    .min(Comparator.comparingInt(RouteInfo::totalMinutes))
+                    .map(r -> new Trip(r.totalMinutes(), r.transfers()));
         } catch (Exception e) {
             log.warn("경로 조회 실패 : {}", e.getMessage());
             return Optional.empty();
         }
+    }
+
+    /** 화면에 보여줄 거점 이름 */
+    private String name(PlaceCondition p) {
+        if (p.label() != null) return p.label();
+        return p.location().placeName() != null ? p.location().placeName() : p.location().address();
     }
 
     private RecommendResult toResult(int rank, Scored s) {
@@ -75,11 +103,13 @@ public class RecommendService {
         var n = c.neighborhood();
         return new RecommendResult(
                 rank, n.gu(), n.dong(), n.lat(), n.lng(),
-                (int) Math.round(s.weeklyMinutes()),
+                (int) Math.round(s.score()),
                 c.totalContracts(), c.budgetContracts(),
                 (int) Math.round(c.budgetRatio() * 100),
                 s.routes());
     }
 
-    private record Scored(CandidateNeighborhood candidate, double weeklyMinutes, List<PlaceRoute> routes) {}
+    private record Trip(int minutes, int transfers) {}
+
+    private record Scored(CandidateNeighborhood candidate, double score, List<PlaceRoute> routes) {}
 }

@@ -1,5 +1,6 @@
 package com.dooribeon.recommend;
 
+import com.dooribeon.condition.Conditions;
 import com.dooribeon.global.util.GeoUtils;
 import com.dooribeon.neighborhood.Neighborhood;
 import com.dooribeon.neighborhood.NeighborhoodRepository;
@@ -22,9 +23,9 @@ public class CandidateFilterService {
     private final NeighborhoodRepository neighborhoodRepository;
     private final RentContractRepository rentContractRepository;
 
-    public List<CandidateNeighborhood> findCandidates(RecommendCondition condition) {
+    public List<CandidateNeighborhood> findCandidates(Conditions conditions) {
         return neighborhoodRepository.findAll().stream()
-                .map(n -> evaluate(n, condition))
+                .map(n -> evaluate(n, conditions))
                 .filter(c -> c.totalContracts() >= MIN_TOTAL_CONTRACTS
                         && c.budgetRatio() >= MIN_BUDGET_RATIO)                        // ① 예산 필터
                 .sorted(Comparator.comparingDouble(CandidateNeighborhood::weightedDistanceKm)) // ② 가까운 순
@@ -32,21 +33,22 @@ public class CandidateFilterService {
                 .toList();
     }
 
-    private CandidateNeighborhood evaluate(Neighborhood n, RecommendCondition condition) {
+    private CandidateNeighborhood evaluate(Neighborhood n, Conditions conditions) {
         List<RentContract> contracts = rentContractRepository.findByNeighborhood(n.key());
 
         int budgetCount = (int) contracts.stream()
-                .filter(c -> c.deposit() <= condition.maxDeposit() && c.rent() <= condition.maxRent())
+                .filter(c -> c.deposit() <= conditions.maxDeposit() && c.rent() <= conditions.maxRent())
                 .count();
 
-        return new CandidateNeighborhood(n, contracts.size(), budgetCount, weightedDistanceKm(n, condition));
+        return new CandidateNeighborhood(n, contracts.size(), budgetCount, weightedDistanceKm(n, conditions));
     }
 
-    /** Σ (주당 방문 횟수 × 거점까지 직선거리) — 자주 가는 곳이 가까울수록 작아짐 */
-    private double weightedDistanceKm(Neighborhood n, RecommendCondition condition) {
-        return condition.places().stream()
-                .mapToDouble(p -> p.visitsPerWeek()
-                        * GeoUtils.distanceMeters(n.lat(), n.lng(), p.lat(), p.lng()) / 1000)
+    /** Σ (중요도 가중치 × 거점까지 직선거리) — 중요한 곳이 가까울수록 작아짐 */
+    private double weightedDistanceKm(Neighborhood n, Conditions conditions) {
+        return conditions.places().stream()
+                .mapToDouble(p -> ImportancePolicy.of(p.importance()).getWeight()
+                        * GeoUtils.distanceMeters(n.lat(), n.lng(),
+                        p.location().lat(), p.location().lng()) / 1000)
                 .sum();
     }
 }

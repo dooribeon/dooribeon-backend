@@ -9,7 +9,7 @@ spring:
       fail-on-trailing-tokens: true
 
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 chatkhu:
   base-url: ${CHATKHU_BASE_URL:https://factchat-cloud.mindlogic.ai/v1/gateway}

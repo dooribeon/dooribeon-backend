@@ -66,7 +66,6 @@ public class KakaoLocalClient implements PlaceSearchClient {
             if (root == null || !root.path("documents").isArray() || !root.path("meta").path("is_end").isBoolean()) throw invalid();
             if (root.path("documents").size() > 15) throw invalid();
             var locations = new ArrayList<PlaceLocation>();
-            var regions = new java.util.HashMap<PlaceLocation, String>();
             for (JsonNode document : root.path("documents")) {
                 String id;
                 String name;
@@ -91,12 +90,9 @@ public class KakaoLocalClient implements PlaceSearchClient {
                 }
                 double lat = coordinate(document, "y", -90, 90);
                 double lng = coordinate(document, "x", -180, 180);
-                var location = new PlaceLocation(id, name, address, lat, lng);
-                locations.add(location);
-                String regionAddress = text(document, "address_name");
-                if (regionAddress != null) regions.put(location, regionAddress);
+                locations.add(new PlaceLocation(id, name, address, lat, lng));
             }
-            return new SearchResult(locations, !root.path("meta").path("is_end").booleanValue() && page < 45, regions);
+            return new SearchResult(locations, !root.path("meta").path("is_end").booleanValue() && page < 45);
         } catch (ApiException e) { throw e; }
         catch (RuntimeException e) { throw invalid(); }
     }

@@ -57,11 +57,32 @@ public class ConditionsExtractionService {
             var unit = new Clarification("budget", Reason.AMOUNT_UNIT_REQUIRED);
             if (!clarifications.contains(unit)) clarifications.add(unit);
         }
+        var extractedPlaces = new ArrayList<>(extraction.places());
+        Set<String> recoveredFamilyRequests = new HashSet<>();
+        List<ConditionsDraft.PendingInput> familyConfirmations = new ArrayList<>();
+        for (String fragment : extraction.unhandledRequests()) {
+            if (!text.contains(fragment)) throw ApiException.invalidAiResponse();
+            var home = FamilyPlaceRequest.recover(fragment);
+            var existingHome = existingPlaces.stream().filter(place -> FamilyPlaceRequest.isHome(place.label())).findFirst();
+            if (home != null && existingHome.isEmpty()) {
+                if (extractedPlaces.stream().noneMatch(place -> FamilyPlaceRequest.isHome(place.label()))) {
+                    extractedPlaces.add(home);
+                }
+                recoveredFamilyRequests.add(fragment);
+            } else if (home != null) {
+                recoveredFamilyRequests.add(fragment);
+                if (!FamilyPlaceRequest.isVisit(fragment)) {
+                    familyConfirmations.add(ConditionsDraft.PendingInput.create(new Issue("conditions",
+                            Kind.NEEDS_CONFIRMATION, "본가의 정확한 주소나 근처 기준 장소를 알려주세요."),
+                            Reason.AMBIGUOUS_INPUT, text, question));
+                }
+            }
+        }
         List<PlaceCondition> places = new ArrayList<>();
         Set<String> defaultRequired = new HashSet<>();
         Set<String> userSpecified = new HashSet<>();
         List<String> extraNotices = new ArrayList<>();
-        for (var extracted : extraction.places()) {
+        for (var extracted : extractedPlaces) {
             String id = UUID.randomUUID().toString();
             places.add(new PlaceCondition(id, extracted.label(), extracted.targetType(), extracted.query(), null,
                     extracted.importance(), extracted.transport(), extracted.maxMinutes(), extracted.frequency()));
@@ -74,13 +95,13 @@ public class ConditionsExtractionService {
         }
         ConditionCheckResult checked = rules.check(new Conditions(deposit, rent, places),
                 new ConditionsRules.InputContext(defaultRequired, userSpecified, false));
-        List<ConditionsDraft.PendingInput> pending = new ArrayList<>();
+        List<ConditionsDraft.PendingInput> pending = new ArrayList<>(familyConfirmations);
         for (Clarification c : clarifications) {
             pending.add(ConditionsDraft.PendingInput.create(toIssue(c), c.reason(), text, question));
         }
         for (String fragment : extraction.unhandledRequests()) {
             if (!text.contains(fragment)) throw ApiException.invalidAiResponse();
-            if (isRepeatedChurchVisit(fragment, extraction, existingPlaces)) continue;
+            if (recoveredFamilyRequests.contains(fragment) || isRepeatedChurchVisit(fragment, extraction, existingPlaces)) continue;
             pending.add(ConditionsDraft.PendingInput.create(new Issue("conditions", Kind.UNSUPPORTED,
                     "아직 반영할 수 없는 조건이 있어요: " + fragment
                             + ". 이 조건을 제외하거나 지원하는 조건으로 바꿀지 알려주세요."), null, text, question));

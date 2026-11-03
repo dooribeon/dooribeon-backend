@@ -50,7 +50,7 @@ public class ConditionConversationService {
     public ConditionConversationResponse start(String text) {
         checkCapacity();
         ConditionsDraft draft = extraction.extractDraft(text);
-        return saveNew(resolveLocations(draft));
+        return saveNew(draft);
     }
 
     private synchronized ConditionConversationResponse saveNew(ConditionsDraft draft) {
@@ -115,7 +115,7 @@ public class ConditionConversationService {
                 deletion = new DeletionConfirmation(place.id(), name, address, name + " 삭제하기");
             }
             // 호출·변경 검사 성공 후 한 번에 저장한다. 예외가 나면 원래 상태를 그대로 둔다.
-            conversation.draft = deletion == null ? resolveLocations(merged.draft()) : merged.draft();
+            conversation.draft = merged.draft();
             conversation.deletion = deletion;
             // 조건 변경 후 이전 검색 화면에서 뒤늦게 선택해도 적용하지 않는다.
             conversation.search = null;
@@ -220,6 +220,7 @@ public class ConditionConversationService {
             }
             // 만원 단위가 표시된 카드에서 금액을 직접 채운 경우에만 금액 확인을 해소한다.
             var pending = old.pendingInputs().stream().filter(input -> {
+                if (input.reason() == null) return true;
                 String path = input.issue().path();
                 return switch (input.reason()) {
                     case AMOUNT_UNIT_REQUIRED, INTEGER_MANWON_REQUIRED, NET_RENT_REQUIRED ->
@@ -234,52 +235,6 @@ public class ConditionConversationService {
             conversation.lastSuccess = clock.instant();
             return response(id, conversation);
         });
-    }
-
-    private ConditionsDraft resolveLocations(ConditionsDraft draft) {
-        var places = new java.util.ArrayList<PlaceCondition>();
-        var notices = new java.util.ArrayList<>(draft.notices());
-        for (var place : draft.conditions().places()) {
-            PlaceLocation location = findExactLocation(place);
-            if (location != null) {
-                place = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), location,
-                        place.importance(), place.transport(), place.maxMinutes(), place.frequency());
-                notices.add((place.label() == null ? location.placeName() : place.label())
-                        + " 위치를 " + location.placeName() + "으로 자동 등록했어요. 카드에서 변경할 수 있어요.");
-            }
-            places.add(place);
-        }
-        return new ConditionsDraft(new Conditions(draft.conditions().maxDeposit(), draft.conditions().maxRent(), places),
-                draft.importanceSpecifiedIds(), draft.pendingInputs(), notices, draft.workOrSchoolIds());
-    }
-
-    private PlaceLocation findExactLocation(PlaceCondition place) {
-        if (place.location() != null || place.targetType() != PlaceCondition.TargetType.FIXED_PLACE || place.query() == null) return null;
-        String query = place.query().strip();
-        if (place.label() != null && query.endsWith(" " + place.label())) {
-            query = query.substring(0, query.length() - place.label().length()).strip();
-        }
-        var match = java.util.regex.Pattern.compile("^(.+(?:동|읍|면))\\s+(.+)$").matcher(query);
-        if (!match.matches()) return null;
-        String[] region = match.group(1).split("\\s+");
-        String building = match.group(2).replaceAll("\\s+", "");
-        var exact = new java.util.LinkedHashSet<PlaceLocation>();
-        try {
-            for (int page = 1; page <= 3; page++) {
-                var found = placeSearch.search(query, PlaceSearchClient.SearchType.KEYWORD, page);
-                for (var candidate : found.locations()) {
-                    String address = found.regionAddresses().get(candidate);
-                    if (candidate.placeName() != null && candidate.placeName().replaceAll("\\s+", "").equals(building)
-                            && address != null && java.util.Arrays.asList(address.split("\\s+")).containsAll(java.util.List.of(region))) {
-                        exact.add(candidate);
-                    }
-                }
-                if (!found.hasNext()) return exact.size() == 1 ? exact.iterator().next() : null;
-            }
-        } catch (ApiException ignored) {
-            // 검색 장애 때도 추출 조건을 보존하고 기존 위치 선택 질문으로 이어간다.
-        }
-        return null;
     }
 
     private ApiException invalidEdit() {

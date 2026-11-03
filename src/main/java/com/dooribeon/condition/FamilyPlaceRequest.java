@@ -24,10 +24,10 @@ final class FamilyPlaceRequest {
             if (!match.matches()) return null;
         }
         String region = match.group("region");
-        String label = (region == null ? "" : region + " ") + match.group("home");
+        String label = match.group("home");
         return new ConditionsExtraction.ExtractedPlace(label, PlaceCondition.TargetType.FIXED_PLACE,
                 null, null, null, false, null, null, null,
-                VAGUE_FREQUENCY.matcher(fragment).find());
+                VAGUE_FREQUENCY.matcher(fragment).find(), region);
     }
 
     static boolean isVisit(String fragment) {

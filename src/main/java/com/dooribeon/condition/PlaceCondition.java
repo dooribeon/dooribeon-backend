@@ -10,14 +10,20 @@ public record PlaceCondition(
         Importance importance,
         Transport transport,
         Integer maxMinutes,
-        VisitFrequency frequency
+        VisitFrequency frequency,
+        String areaHint
 ) {
+    public PlaceCondition(String id, String label, TargetType targetType, String query, PlaceLocation location,
+                          Importance importance, Transport transport, Integer maxMinutes, VisitFrequency frequency) {
+        this(id, label, targetType, query, location, importance, transport, maxMinutes, frequency, null);
+    }
+
     public enum TargetType { FIXED_PLACE, NEARBY_FACILITY }
     public enum Importance { REQUIRED, HIGH, MEDIUM, LOW }
     public enum Transport { PUBLIC_TRANSIT, WALK }
 
     public PlaceCondition withImportance(Importance value) {
         return new PlaceCondition(id, label, targetType, query, location, value,
-                transport, maxMinutes, frequency);
+                transport, maxMinutes, frequency, areaHint);
     }
 }

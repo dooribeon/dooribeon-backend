@@ -10,9 +10,9 @@ class FamilyPlaceRequestTests {
     void homeIntroductionsBecomeFixedPlacesWithMissingAddressesInsteadOfUnsupportedRequests() {
         var extractor = mock(ConditionsExtractor.class);
         var service = new ConditionsExtractionService(extractor, new ConditionsRules());
-        var cases = java.util.Map.of("본가는 부산이야", "부산 본가",
-                "부모님 집은 수원에 있어요", "수원 부모님 집",
-                "수원 본가에 자주 가고 싶어", "수원 본가");
+        var cases = java.util.Map.of("본가는 부산이야", "본가",
+                "부모님 집은 수원에 있어요", "부모님 집",
+                "수원 본가에 자주 가고 싶어", "본가");
         for (var entry : cases.entrySet()) {
             String fragment = entry.getKey();
             String text = "보증금 1000만 원, 월세 50만 원. " + fragment;
@@ -23,6 +23,7 @@ class FamilyPlaceRequestTests {
             var home = result.conditions().places().getFirst();
             assertThat(home.label()).isEqualTo(entry.getValue());
             assertThat(home.targetType()).isEqualTo(PlaceCondition.TargetType.FIXED_PLACE);
+            assertThat(home.areaHint()).isEqualTo(fragment.contains("부산") ? "부산" : "수원");
             assertThat(home.query()).isNull();
             assertThat(home.location()).isNull();
             assertThat(home.importance()).isNull();

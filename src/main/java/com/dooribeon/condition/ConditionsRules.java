@@ -80,6 +80,7 @@ public class ConditionsRules {
 
     private void checkPlace(PlaceCondition place, String path, List<Issue> issues, List<String> notices) {
         checkOptionalText(place.label(), path + ".label", issues);
+        checkOptionalText(place.areaHint(), path + ".areaHint", issues);
         checkOptionalText(place.query(), path + ".query", issues);
         String name = displayName(place);
         if (place.targetType() == null) {
@@ -91,7 +92,9 @@ public class ConditionsRules {
                     "주변 시설 조건은 아직 추천에 연결되지 않았어요. 특정 장소로 지정하거나 조건을 수정해 주세요.");
         } else if (place.location() == null) {
             add(issues, path + ".location", Kind.MISSING,
-                    name + "의 위치를 목록에서 선택해 주세요.");
+                    place.query() == null ? name + (place.areaHint() == null ? "" : " (" + place.areaHint() + ")")
+                            + "의 정확한 위치를 알려주세요. 주소나 기준으로 삼을 건물·역 이름을 입력해 주세요."
+                            : name + "의 위치를 목록에서 선택해 주세요.");
         }
         if (place.location() != null) checkLocation(place.location(), path + ".location", issues);
 

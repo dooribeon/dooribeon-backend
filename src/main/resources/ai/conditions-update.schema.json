@@ -130,7 +130,8 @@
                 "importance",
                 "transport",
                 "maxMinutes",
-                "frequency"
+                "frequency",
+                "areaHint"
               ],
               "type": "string"
             }
@@ -169,7 +170,8 @@
         "transport",
         "maxMinutes",
         "frequency",
-        "frequencyUnclear"
+        "frequencyUnclear",
+        "areaHint"
       ],
       "properties": {
         "label": {
@@ -278,6 +280,12 @@
         },
         "frequencyUnclear": {
           "type": "boolean"
+        },
+        "areaHint": {
+          "type": [
+            "string",
+            "null"
+          ]
         }
       }
     }

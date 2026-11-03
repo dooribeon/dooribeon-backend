@@ -66,7 +66,7 @@ public class ChatKhuConditionsCodec {
         var aiConditions = new com.dooribeon.condition.Conditions(current.conditions().maxDeposit(),
                 current.conditions().maxRent(), current.conditions().places().stream().map(p ->
                 new com.dooribeon.condition.PlaceCondition(p.id(), p.label(), p.targetType(), p.query(), null,
-                        p.importance(), p.transport(), p.maxMinutes(), p.frequency())).toList());
+                        p.importance(), p.transport(), p.maxMinutes(), p.frequency(), p.areaHint())).toList());
         String context = mapper.writeValueAsString(Map.of("currentConditions", aiConditions,
                 "pendingInputs", current.pendingInputs().stream().map(p -> new ConditionsDraft.PendingInput(
                         p.id(), p.issue(), p.reason(), p.sourceText(), withoutMapDetails(p.question(), current))).toList(),
@@ -153,8 +153,10 @@ public class ChatKhuConditionsCodec {
     }
 
     private ExtractedPlace readPlace(Map<?, ?> place) {
-        exactKeys(place, "label", "targetType", "query", "role", "importance", "importanceSpecified",
-                "transport", "maxMinutes", "frequency", "frequencyUnclear");
+        var keys = new java.util.ArrayList<>(java.util.List.of("label", "targetType", "query", "role", "importance",
+                "importanceSpecified", "transport", "maxMinutes", "frequency", "frequencyUnclear"));
+        if (place.containsKey("areaHint")) keys.add("areaHint");
+        exactKeys(place, keys.toArray(String[]::new));
         Importance importance = enumValue(place.get("importance"), Importance.class, true);
         boolean specified = bool(place.get("importanceSpecified"));
         if (importance != null && !specified) throw invalid();
@@ -171,7 +173,7 @@ public class ChatKhuConditionsCodec {
                 enumValue(place.get("targetType"), TargetType.class, true), text(place.get("query"), true),
                 enumValue(place.get("role"), Role.class, true), importance, specified,
                 enumValue(place.get("transport"), Transport.class, true), positiveInt(place.get("maxMinutes"), true),
-                frequency, unclear);
+                frequency, unclear, text(place.get("areaHint"), true));
     }
 
     private void checkClarification(Clarification c, Long deposit, Long rent) {

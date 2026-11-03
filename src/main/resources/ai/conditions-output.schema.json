@@ -38,7 +38,8 @@
           "transport",
           "maxMinutes",
           "frequency",
-          "frequencyUnclear"
+          "frequencyUnclear",
+          "areaHint"
         ],
         "properties": {
           "label": {
@@ -147,6 +148,12 @@
           },
           "frequencyUnclear": {
             "type": "boolean"
+          },
+          "areaHint": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       }

@@ -48,6 +48,12 @@ public class ConditionConversationController {
         return service.edit(conversationId, request);
     }
 
+    @PostMapping("/{conversationId}/places/{placeId}/delete")
+    public ConditionConversationResponse deletePlace(@PathVariable UUID conversationId, @PathVariable String placeId,
+                                                     @Valid @RequestBody PlaceDeleteRequest request) {
+        return service.deletePlace(conversationId, placeId, request);
+    }
+
     @PostMapping("/{conversationId}/places")
     public ConditionConversationResponse addPlace(@PathVariable UUID conversationId,
                                                   @Valid @RequestBody PlaceAddRequest request) {

@@ -23,15 +23,35 @@ public class CandidateFilterService {
     private final NeighborhoodRepository neighborhoodRepository;
     private final RentContractRepository rentContractRepository;
 
-    public List<CandidateNeighborhood> findCandidates(Conditions conditions) {
-        return neighborhoodRepository.findAll().stream()
+    /** 후보를 찾는 과정 전체 (탐색 화면에서 단계별로 보여주기용) */
+    public CandidateSearch search(Conditions conditions) {
+        List<Neighborhood> all = neighborhoodRepository.findAll();
+
+        List<CandidateNeighborhood> budgetPassed = all.stream()
                 .map(n -> evaluate(n, conditions))
                 .filter(c -> c.totalContracts() >= MIN_TOTAL_CONTRACTS
                         && c.budgetRatio() >= MIN_BUDGET_RATIO)                        // ① 예산 필터
                 .sorted(Comparator.comparingDouble(CandidateNeighborhood::weightedDistanceKm)) // ② 가까운 순
-                .limit(MAX_CANDIDATES)
                 .toList();
+
+        List<CandidateNeighborhood> candidates = budgetPassed.stream()
+                .limit(MAX_CANDIDATES)                                                 // ③ 후보 20곳
+                .toList();
+
+        return new CandidateSearch(all.size(), budgetPassed, candidates);
     }
+
+    /** 경로 API로 넘길 후보 20곳 */
+    public List<CandidateNeighborhood> findCandidates(Conditions conditions) {
+        return search(conditions).candidates();
+    }
+
+    /** 전체 동네 수, 예산 통과 동네(가까운 순), 경로를 확인할 후보 */
+    public record CandidateSearch(
+            int totalNeighborhoods,
+            List<CandidateNeighborhood> budgetPassed,
+            List<CandidateNeighborhood> candidates
+    ) {}
 
     private CandidateNeighborhood evaluate(Neighborhood n, Conditions conditions) {
         List<RentContract> contracts = rentContractRepository.findByNeighborhood(n.key());

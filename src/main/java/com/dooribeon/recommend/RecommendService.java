@@ -68,8 +68,8 @@ public class RecommendService {
                 return Optional.empty();
             }
 
-            routes.add(new PlaceRoute(name(p), Importance.valueOf(policy.name()), transport,
-                    minutes, trip.get().transfers()));
+            routes.add(new PlaceRoute(p.id(), name(p), Importance.valueOf(policy.name()), transport,
+                    minutes, p.maxMinutes(), trip.get().transfers()));
             score += minutes * policy.getWeight();
         }
         return Optional.of(new Scored(c, score, routes));

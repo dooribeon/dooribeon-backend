@@ -34,7 +34,7 @@ public class ConditionsMerger {
         var values = update.values();
         declared(update.updatedFields(), "maxDeposit", values.maxDeposit());
         declared(update.updatedFields(), "maxRent", values.maxRent());
-        var added = extraction.prepare(values, text, question);
+        var added = extraction.prepare(values, text, question, current.conditions().places());
         var changed = update.updatedFields();
         Long deposit = changed.contains("maxDeposit") && !blocked(added, "maxDeposit")
                 ? added.conditions().maxDeposit() : current.conditions().maxDeposit();

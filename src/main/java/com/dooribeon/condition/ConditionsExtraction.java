@@ -32,7 +32,9 @@ public record ConditionsExtraction(
     public enum Role { WORK, SCHOOL }
 
     /** field는 maxDeposit, maxRent, budget, conditions 중 하나다. 질문 문구는 서버가 정한다. */
-    public record Clarification(String field, Reason reason) {}
+    public record Clarification(String field, Reason reason, String sourceText) {
+        public Clarification(String field, Reason reason) { this(field, reason, null); }
+    }
 
     public enum Reason {
         AMOUNT_UNIT_REQUIRED,

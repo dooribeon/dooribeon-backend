@@ -35,6 +35,8 @@ public class ConditionsMerger {
         declared(update.updatedFields(), "maxDeposit", values.maxDeposit());
         declared(update.updatedFields(), "maxRent", values.maxRent());
         var added = extraction.prepare(values, text, question, current.conditions().places());
+        boolean ambiguousTravel = AmbiguousTravelTarget.phrase(text,
+                current.conditions().places().size() + added.conditions().places().size()) != null;
         var changed = update.updatedFields();
         Long deposit = changed.contains("maxDeposit") && !blocked(added, "maxDeposit")
                 ? added.conditions().maxDeposit() : current.conditions().maxDeposit();
@@ -79,9 +81,14 @@ public class ConditionsMerger {
             places.put(old.id(), new PlaceCondition(old.id(), fields.contains("label") ? v.label() : old.label(),
                     type, fields.contains("query") ? v.query() : old.query(), locationChanged ? null : old.location(),
                     importance, fields.contains("transport") ? v.transport() : old.transport(),
-                    fields.contains("maxMinutes") ? v.maxMinutes() : old.maxMinutes(),
-                    fields.contains("frequency") ? v.frequency() : old.frequency()));
-            if (v.frequencyUnclear()) notices.add("방문 횟수는 불분명해서 반영하지 않았어요. 주·월 횟수를 알려주셔도 돼요.");
+                    fields.contains("maxMinutes") && !ambiguousTravel ? v.maxMinutes() : old.maxMinutes(),
+                    fields.contains("frequency") && !v.frequencyUnclear() ? v.frequency() : old.frequency()));
+            if (v.frequencyUnclear()) {
+                if (old.frequency() == null) notices.add(ConditionsExtractionService.unclearFrequencyNotice(text, old.label()));
+                else notices.add(ConditionsExtractionService.vagueFrequencyExpression(text) + (old.label() == null ? "장소" : old.label())
+                        + "의 기존 " + (old.frequency().period() == VisitFrequency.Period.WEEK ? "주 " : "월 ")
+                        + old.frequency().count() + "회를 유지했어요.");
+            }
         }
         added.conditions().places().forEach(p -> places.put(p.id(), p));
         var pending = new ArrayList<ConditionsDraft.PendingInput>();

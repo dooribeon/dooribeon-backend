@@ -110,6 +110,16 @@ class ChatKhuConditionsCodecTests {
     }
 
     @Test
+    void readsQuotedClarificationSourceAndRejectsNonTextSources() {
+        String clarification = "[{\"field\":\"conditions\",\"reason\":\"AMBIGUOUS_INPUT\",\"sourceText\":\"거기까지 30분\"}]";
+        var result = codec.readResponse(ChatKhuBudgetCodecTests.envelope(emptyPlaces("1000", "50", clarification)));
+        assertThat(result.clarifications().getFirst().sourceText()).isEqualTo("거기까지 30분");
+        assertThatThrownBy(() -> codec.readResponse(ChatKhuBudgetCodecTests.envelope(
+                emptyPlaces("1000", "50", clarification.replace("\"거기까지 30분\"", "30")))))
+                .isInstanceOf(ApiException.class);
+    }
+
+    @Test
     void decimalsNumericStringsBooleansNegativeAndOversizedAmountsAreRejected() {
         for (String value : List.of("50.5", "50.0", "1e2", "\"50\"", "true", "-1",
                 "9007199254740992", "9999999999999999999999999")) {

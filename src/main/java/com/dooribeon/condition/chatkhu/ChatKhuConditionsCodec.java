@@ -137,10 +137,12 @@ public class ChatKhuConditionsCodec {
         List<Clarification> clarifications = new ArrayList<>();
         for (Object value : array(result.get("clarifications"))) {
             Map<?, ?> item = object(value);
-            exactKeys(item, "field", "reason");
+            if (item.containsKey("sourceText")) exactKeys(item, "field", "reason", "sourceText");
+            else exactKeys(item, "field", "reason");
             String field = text(item.get("field"), false);
             if (!Set.of("maxDeposit", "maxRent", "budget", "conditions").contains(field)) throw invalid();
-            var clarification = new Clarification(field, enumValue(item.get("reason"), Reason.class, false));
+            var clarification = new Clarification(field, enumValue(item.get("reason"), Reason.class, false),
+                    text(item.get("sourceText"), true));
             checkClarification(clarification, deposit, rent);
             if (clarifications.contains(clarification)) throw invalid();
             clarifications.add(clarification);

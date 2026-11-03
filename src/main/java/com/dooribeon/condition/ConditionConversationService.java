@@ -50,7 +50,7 @@ public class ConditionConversationService {
     public ConditionConversationResponse start(String text) {
         checkCapacity();
         ConditionsDraft draft = extraction.extractDraft(text);
-        return saveNew(draft);
+        return saveNew(resolveLocations(draft));
     }
 
     private synchronized ConditionConversationResponse saveNew(ConditionsDraft draft) {
@@ -115,7 +115,7 @@ public class ConditionConversationService {
                 deletion = new DeletionConfirmation(place.id(), name, address, name + " 삭제하기");
             }
             // 호출·변경 검사 성공 후 한 번에 저장한다. 예외가 나면 원래 상태를 그대로 둔다.
-            conversation.draft = merged.draft();
+            conversation.draft = deletion == null ? resolveLocations(merged.draft()) : merged.draft();
             conversation.deletion = deletion;
             // 조건 변경 후 이전 검색 화면에서 뒤늦게 선택해도 적용하지 않는다.
             conversation.search = null;
@@ -185,6 +185,105 @@ public class ConditionConversationService {
             throw new ApiException(HttpStatus.CONFLICT, "PLACE_TYPE_NOT_SUPPORTED", "특정 장소로 지정한 뒤 위치를 검색해 주세요.");
         }
         return place;
+    }
+
+    public ConditionConversationResponse edit(UUID id, ConditionEditRequest request) {
+        return withConversation(id, conversation -> {
+            if (conversation.deletion != null) {
+                throw new ApiException(HttpStatus.CONFLICT, "PLACE_DELETE_PENDING", "먼저 장소 삭제를 확인하거나 취소해 주세요.");
+            }
+            var old = conversation.draft;
+            if (!old.conditions().equals(request.expected())) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONDITIONS_CHANGED", "조건이 변경됐어요. 최신 조건을 확인한 뒤 다시 수정해 주세요.");
+            }
+            var values = request.values();
+            var previous = old.conditions().places();
+            if (values.places() == null || values.places().size() != previous.size()) throw invalidEdit();
+            var places = new java.util.ArrayList<PlaceCondition>();
+            var specified = new java.util.HashSet<>(old.importanceSpecifiedIds());
+            for (int i = 0; i < previous.size(); i++) {
+                var before = previous.get(i);
+                var after = values.places().get(i);
+                if (after == null || !before.id().equals(after.id())) throw invalidEdit();
+                if (before.location() == null && (!java.util.Objects.equals(before.importance(), after.importance())
+                        || before.transport() != after.transport()
+                        || !java.util.Objects.equals(before.maxMinutes(), after.maxMinutes())
+                        || !java.util.Objects.equals(before.frequency(), after.frequency()))) throw invalidEdit();
+                if (!java.util.Objects.equals(before.importance(), after.importance())) specified.add(before.id());
+                String label = after.label() == null || after.label().isBlank() ? null : after.label().strip();
+                places.add(new PlaceCondition(before.id(), label, before.targetType(), before.query(), before.location(),
+                        after.importance(), after.transport(), after.maxMinutes(), after.frequency()));
+            }
+            var conditions = new Conditions(values.maxDeposit(), values.maxRent(), places);
+            if (rules.check(conditions).issues().stream().anyMatch(issue -> issue.kind() == ConditionCheckResult.Kind.INVALID)) {
+                throw invalidEdit();
+            }
+            // 만원 단위가 표시된 카드에서 금액을 직접 채운 경우에만 금액 확인을 해소한다.
+            var pending = old.pendingInputs().stream().filter(input -> {
+                String path = input.issue().path();
+                return switch (input.reason()) {
+                    case AMOUNT_UNIT_REQUIRED, INTEGER_MANWON_REQUIRED, NET_RENT_REQUIRED ->
+                        !(path.equals("budget") ? conditions.maxDeposit() != null && conditions.maxRent() != null
+                            : path.equals("maxDeposit") ? conditions.maxDeposit() != null : conditions.maxRent() != null);
+                    default -> true;
+                };
+            }).toList();
+            conversation.draft = new ConditionsDraft(conditions, specified, pending,
+                    List.of("카드에서 수정한 조건을 저장했어요."), old.workOrSchoolIds());
+            conversation.search = null;
+            conversation.lastSuccess = clock.instant();
+            return response(id, conversation);
+        });
+    }
+
+    private ConditionsDraft resolveLocations(ConditionsDraft draft) {
+        var places = new java.util.ArrayList<PlaceCondition>();
+        var notices = new java.util.ArrayList<>(draft.notices());
+        for (var place : draft.conditions().places()) {
+            PlaceLocation location = findExactLocation(place);
+            if (location != null) {
+                place = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), location,
+                        place.importance(), place.transport(), place.maxMinutes(), place.frequency());
+                notices.add((place.label() == null ? location.placeName() : place.label())
+                        + " 위치를 " + location.placeName() + "으로 자동 등록했어요. 카드에서 변경할 수 있어요.");
+            }
+            places.add(place);
+        }
+        return new ConditionsDraft(new Conditions(draft.conditions().maxDeposit(), draft.conditions().maxRent(), places),
+                draft.importanceSpecifiedIds(), draft.pendingInputs(), notices, draft.workOrSchoolIds());
+    }
+
+    private PlaceLocation findExactLocation(PlaceCondition place) {
+        if (place.location() != null || place.targetType() != PlaceCondition.TargetType.FIXED_PLACE || place.query() == null) return null;
+        String query = place.query().strip();
+        if (place.label() != null && query.endsWith(" " + place.label())) {
+            query = query.substring(0, query.length() - place.label().length()).strip();
+        }
+        var match = java.util.regex.Pattern.compile("^(.+(?:동|읍|면))\\s+(.+)$").matcher(query);
+        if (!match.matches()) return null;
+        String[] region = match.group(1).split("\\s+");
+        String building = match.group(2).replaceAll("\\s+", "");
+        var exact = new java.util.LinkedHashSet<PlaceLocation>();
+        try {
+            for (int page = 1; page <= 3; page++) {
+                var found = placeSearch.search(query, PlaceSearchClient.SearchType.KEYWORD, page);
+                for (var candidate : found.locations()) {
+                    String address = found.regionAddresses().get(candidate);
+                    if (candidate.placeName() != null && candidate.placeName().replaceAll("\\s+", "").equals(building)
+                            && address != null && java.util.Arrays.asList(address.split("\\s+")).containsAll(java.util.List.of(region))) {
+                        exact.add(candidate);
+                    }
+                }
+                if (!found.hasNext()) return exact.size() == 1 ? exact.iterator().next() : null;
+            }
+        } catch (ApiException ignored) {
+            // 검색 장애 때도 추출 조건을 보존하고 기존 위치 선택 질문으로 이어간다.
+        }
+        return null;
+    }
+
+    private ApiException invalidEdit() {
+        return new ApiException(HttpStatus.BAD_REQUEST, "INVALID_CONDITION_EDIT", "금액·시간·방문 횟수와 장소 항목을 확인해 주세요.");
     }
 
     private <T> T withConversation(UUID id, Function<Conversation, T> action) {

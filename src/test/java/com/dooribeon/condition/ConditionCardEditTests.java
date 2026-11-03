@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 class ConditionCardEditTests {
     @Test
-    void exactBuildingRegistersAndCardEditsSurviveChatWhileStaleAndInvalidWritesFail() {
+    void exactBuildingNeedsSelectionAndCardEditsSurviveChatWhileStaleAndInvalidWritesFail() {
         var extractor = mock(ConditionsExtractor.class);
         var search = mock(PlaceSearchClient.class);
         var rules = new ConditionsRules();
@@ -23,22 +23,33 @@ class ConditionCardEditTests {
         when(extractor.extractUpdate(anyString(), any(), anyString())).thenReturn(ConditionConversationServiceTests.noChange());
         var building = new PlaceLocation("building", "아크플레이스", "서울 강남구 테헤란로 142", 37.5, 127.03);
         var parking = new PlaceLocation("parking", "아크플레이스 주차장", building.address(), 37.5, 127.03);
-        when(search.search(eq("역삼동 아크플레이스"), any(), anyInt())).thenReturn(
-                new PlaceSearchClient.SearchResult(List.of(building, parking), false,
-                        Map.of(building, "서울 강남구 역삼동 736", parking, "서울 강남구 역삼동 736")));
+        when(search.search(eq("역삼동 아크플레이스 토스"), any(), anyInt())).thenReturn(
+                new PlaceSearchClient.SearchResult(List.of(building, parking), false));
         var first = service.start("보증금 1000만 원 월세 50만 원 회사 역삼동 아크플레이스 토스");
+        var unselected = first.conditions().places().getFirst();
+        assertThat(unselected.location()).isNull();
+        assertThat(first.readyForRecommendation()).isFalse();
+        verifyNoInteractions(search);
+        var found = service.searchPlace(first.conversationId(), unselected.id(),
+                new PlaceSearchRequest(unselected.query(), PlaceSearchClient.SearchType.KEYWORD, 1));
+        assertThat(service.reply(first.conversationId(), "유지해줘").conditions().places().getFirst().location()).isNull();
+        found = service.searchPlace(first.conversationId(), unselected.id(),
+                new PlaceSearchRequest(unselected.query(), PlaceSearchClient.SearchType.KEYWORD, 1));
+        first = service.selectPlace(first.conversationId(), unselected.id(),
+                new PlaceSelectionRequest(found.searchId(), found.candidates().getFirst().candidateId()));
         var place = first.conditions().places().getFirst();
         assertThat(place.location()).isEqualTo(building);
         var edited = new PlaceCondition(place.id(), null, place.targetType(), place.query(), null,
                 PlaceCondition.Importance.HIGH, PlaceCondition.Transport.WALK, 70, new VisitFrequency(VisitFrequency.Period.WEEK, 1));
+        var selected = first;
         var values = new Conditions(2000L, 50L, List.of(edited));
         var saved = service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(), values));
         assertThat(saved.conditions().places().getFirst().location()).isEqualTo(building);
         assertThat(saved.conditions().places().getFirst().label()).isNull();
         assertThat(service.reply(first.conversationId(), "유지해줘").conditions()).isEqualTo(saved.conditions());
-        assertThatThrownBy(() -> service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(), values)))
+        assertThatThrownBy(() -> service.edit(selected.conversationId(), new ConditionEditRequest(selected.conditions(), values)))
                 .isInstanceOf(ApiException.class);
-        assertThatThrownBy(() -> service.edit(first.conversationId(),
+        assertThatThrownBy(() -> service.edit(selected.conversationId(),
                 new ConditionEditRequest(saved.conditions(), new Conditions(-1L, 50L, values.places())))).isInstanceOf(ApiException.class);
     }
 
@@ -54,7 +65,7 @@ class ConditionCardEditTests {
         when(extractor.extract(anyString())).thenReturn(new ConditionsExtraction(1000L, 50L, List.of(input), List.of(), List.of()));
         var other = new PlaceLocation("other", "아크플레이스", "다른 주소", 37.5, 127.03);
         when(search.search(anyString(), any(), anyInt())).thenReturn(
-                new PlaceSearchClient.SearchResult(List.of(other), false, Map.of(other, "서울 강남구 삼성동 1")));
+                new PlaceSearchClient.SearchResult(List.of(other), false));
         var first = service.start("테스트");
         var place = first.conditions().places().getFirst();
         assertThat(place.location()).isNull();
@@ -67,4 +78,21 @@ class ConditionCardEditTests {
         assertThat(service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(),
                 new Conditions(1000L, 50L, List.of(renamed)))).conditions().places().getFirst().label()).isEqualTo("새 이름");
     }
+    @Test
+    void changingBudgetPreservesUnsupportedRequestsWithoutAReasonCode() {
+        var extractor = mock(ConditionsExtractor.class);
+        var rules = new ConditionsRules();
+        var extraction = new ConditionsExtractionService(extractor, rules);
+        var service = new ConditionConversationService(extractor, extraction, rules,
+                new ConditionsMerger(extraction, rules), mock(PlaceSearchClient.class));
+        when(extractor.extract(anyString())).thenReturn(new ConditionsExtraction(1000L, 50L,
+                List.of(), List.of(), List.of("조용한 동네")));
+        var first = service.start("보증금 1000만 원 월세 50만 원 조용한 동네");
+        var saved = service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(),
+                new Conditions(2000L, 50L, List.of())));
+        assertThat(saved.conditions().maxDeposit()).isEqualTo(2000L);
+        assertThat(saved.issues()).anyMatch(issue -> issue.kind() == ConditionCheckResult.Kind.UNSUPPORTED
+                && issue.message().contains("조용한 동네"));
+    }
+
 }

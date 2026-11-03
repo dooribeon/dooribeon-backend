@@ -39,6 +39,11 @@ public class ConditionsExtractionService {
     }
 
     ConditionsDraft prepare(ConditionsExtraction extraction, String text, String question) {
+        return prepare(extraction, text, question, List.of());
+    }
+
+    ConditionsDraft prepare(ConditionsExtraction extraction, String text, String question,
+                            List<PlaceCondition> existingPlaces) {
         if (extraction == null) throw ApiException.invalidAiResponse();
         List<Clarification> clarifications = new ArrayList<>(extraction.clarifications());
         Long deposit = extraction.maxDeposit();
@@ -75,6 +80,7 @@ public class ConditionsExtractionService {
         }
         for (String fragment : extraction.unhandledRequests()) {
             if (!text.contains(fragment)) throw ApiException.invalidAiResponse();
+            if (isRepeatedChurchVisit(fragment, extraction, existingPlaces)) continue;
             pending.add(ConditionsDraft.PendingInput.create(new Issue("conditions", Kind.UNSUPPORTED,
                     "아직 반영할 수 없는 조건이 있어요: " + fragment
                             + ". 이 조건을 제외하거나 지원하는 조건으로 바꿀지 알려주세요."), null, text, question));
@@ -82,6 +88,30 @@ public class ConditionsExtractionService {
         List<String> notices = new ArrayList<>(checked.notices());
         notices.addAll(extraNotices);
         return new ConditionsDraft(checked.conditions(), userSpecified, pending, notices, defaultRequired);
+    }
+
+    private boolean isRepeatedChurchVisit(String fragment, ConditionsExtraction extraction,
+                                          List<PlaceCondition> existingPlaces) {
+        Set<String> names = new HashSet<>();
+        extraction.places().stream().filter(place -> place.targetType() == TargetType.FIXED_PLACE)
+                .forEach(place -> addChurchNames(names, place.label(), place.query()));
+        existingPlaces.stream().filter(place -> place.targetType() == TargetType.FIXED_PLACE)
+                .forEach(place -> addChurchNames(names, place.label(), place.query()));
+        if (names.isEmpty()) return false;
+        names.add("교회");
+        String church = names.stream().map(Pattern::quote).collect(java.util.stream.Collectors.joining("|"));
+        // 방문 의사만 담긴 문장 전체가 일치할 때만 중복을 제거한다.
+        // 치안·소음·자가용 등의 요구가 함께 있으면 원래 미지원 안내를 보존한다.
+        String visit = "^(?:(?:지금|현재|기존에?)\\s*)?(?:(?:다니는|다녔던|가던)\\s*)?"
+                + "(?:" + church + ")\\s*(?:을|를|에)?\\s*(?:계속\\s*)?"
+                + "(?:(?:다니고\\s*싶(?:어(?:요)?|습니다)|다녀(?:요)?|다닐\\s*거(?:야|예요)))?[.!?。\\s]*$";
+        return Pattern.matches(visit, fragment.strip());
+    }
+
+    private void addChurchNames(Set<String> names, String label, String query) {
+        for (String name : new String[] {label, query}) {
+            if (name != null && name.strip().endsWith("교회")) names.add(name.strip());
+        }
     }
 
     private Issue toIssue(Clarification c) {

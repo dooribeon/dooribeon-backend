@@ -133,6 +133,68 @@ class ConditionsExtractionServiceTests {
                 .isInstanceOfSatisfying(ApiException.class, e -> assertThat(e.code()).isEqualTo("AI_BUSY"));
     }
 
+    @Test
+    void continuingAnExtractedChurchDoesNotAlsoBecomeUnsupported() {
+        var church = new ExtractedPlace("교회", TargetType.FIXED_PLACE, null, null,
+                null, false, null, null, null, false);
+        for (String request : List.of("지금 다니는 교회를 계속 다니고 싶어.",
+                "현재 다니는 교회에 계속 다녀요", "창훈대교회를 계속 다니고 싶어요")) {
+            var named = request.contains("창훈대") ? new ExtractedPlace("교회", TargetType.FIXED_PLACE,
+                    "창훈대교회", null, null, false, null, null, null, false) : church;
+            String text = "보증금 1000만 원, 월세 50만 원. " + request;
+            when(extractor.extract(text)).thenReturn(new ConditionsExtraction(1000L, 50L,
+                    List.of(named), List.of(), List.of(request)));
+            var result = service.parse(text);
+            assertThat(result.conditions().places()).hasSize(1);
+            assertThat(result.issues()).noneMatch(issue -> issue.kind() == ConditionCheckResult.Kind.UNSUPPORTED);
+            assertThat(result.nextQuestion()).contains("위치");
+            assertThat(result.readyForRecommendation()).isFalse();
+        }
+    }
+
+    @Test
+    void unsupportedDemandsContainingChurchArePreserved() {
+        var church = new ExtractedPlace("교회", TargetType.FIXED_PLACE, null, null,
+                null, false, null, null, null, false);
+        for (String request : List.of("교회 근처에 조용한 동네가 좋아", "교회까지 자가용으로 30분",
+                "교회 주변 치안이 좋아야 해", "교회를 계속 다니고 싶고 소음도 없어야 해")) {
+            var result = service.prepare(new ConditionsExtraction(1000L, 50L, List.of(church),
+                    List.of(), List.of(request)), "보증금 1000만 원 월세 50만 원 " + request, "").check(new ConditionsRules());
+            assertThat(result.issues()).anyMatch(issue -> issue.kind() == ConditionCheckResult.Kind.UNSUPPORTED
+                    && issue.message().contains(request));
+        }
+    }
+
+    @Test
+    void churchWordAloneDoesNotHideUnrepresentedOrNearbyRequests() {
+        String request = "지금 다니는 교회를 계속 다니고 싶어";
+        for (List<ExtractedPlace> places : List.of(List.<ExtractedPlace>of(),
+                List.of(new ExtractedPlace("교회", TargetType.NEARBY_FACILITY, null, null,
+                        null, false, null, null, null, false)))) {
+            var result = service.prepare(new ConditionsExtraction(1000L, 50L, places, List.of(), List.of(request)),
+                    "보증금 1000만 원 월세 50만 원 " + request, "").check(new ConditionsRules());
+            assertThat(result.issues()).anyMatch(issue -> issue.message().contains(request));
+        }
+    }
+
+    @Test
+    void followupUsesExistingChurchAndPreservesUnrelatedUnsupportedRequests() {
+        var church = new PlaceCondition("church-id", "교회", TargetType.FIXED_PLACE, null,
+                null, Importance.HIGH, Transport.PUBLIC_TRANSIT, 70,
+                new VisitFrequency(VisitFrequency.Period.WEEK, 1));
+        String visit = "지금 다니는 교회를 계속 다니고 싶어";
+        String noise = "조용한 동네";
+        var current = new ConditionsDraft(new Conditions(1000L, 50L, List.of(church)), java.util.Set.of("church-id"),
+                List.of(), List.of());
+        var update = new ConditionsUpdate(new ConditionsExtraction(null, null, List.of(), List.of(), List.of(visit, noise)),
+                java.util.Set.of(), List.of(), java.util.Set.of());
+        var merged = new ConditionsMerger(service, new ConditionsRules())
+                .merge(current, update, visit + ". " + noise, "").draft();
+        assertThat(merged.conditions()).isEqualTo(current.conditions());
+        assertThat(merged.pendingInputs()).hasSize(1);
+        assertThat(merged.pendingInputs().getFirst().issue().message()).contains(noise);
+    }
+
     private ConditionsExtraction extraction(Long deposit, Long rent, List<ExtractedPlace> places,
                                             List<Clarification> clarifications) {
         return new ConditionsExtraction(deposit, rent, places, clarifications, List.of());

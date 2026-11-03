@@ -17,6 +17,6 @@ public class ApiException extends RuntimeException {
 
     public static ApiException invalidAiResponse() {
         return new ApiException(HttpStatus.BAD_GATEWAY, "AI_INVALID_RESPONSE",
-                "AI 답변이 약속한 JSON 형식이나 예산 규칙과 달라요. 다시 시도해 주세요.");
+                "입력한 조건을 정리하지 못했어요. 장소 이름과 변경할 내용을 나누어 다시 알려주세요.");
     }
 }

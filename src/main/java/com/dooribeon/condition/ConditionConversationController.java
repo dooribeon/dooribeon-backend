@@ -47,4 +47,10 @@ public class ConditionConversationController {
                                               @Valid @RequestBody ConditionEditRequest request) {
         return service.edit(conversationId, request);
     }
+
+    @PostMapping("/{conversationId}/places")
+    public ConditionConversationResponse addPlace(@PathVariable UUID conversationId,
+                                                  @Valid @RequestBody PlaceAddRequest request) {
+        return service.addPlace(conversationId, request);
+    }
 }

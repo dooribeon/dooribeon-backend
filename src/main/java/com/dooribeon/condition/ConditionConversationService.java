@@ -103,7 +103,8 @@ public class ConditionConversationService {
                                 ConditionsExtraction.Reason.AMOUNT_UNIT_REQUIRED)), java.util.List.of()),
                         java.util.Set.of(), java.util.List.of(), java.util.Set.of());
             } else {
-                update = extractor.extractUpdate(text, conversation.draft, question);
+                update = PersonalVisitRequest.update(text, conversation.draft);
+                if (update == null) update = extractor.extractUpdate(text, conversation.draft, question);
             }
             var merged = merger.merge(conversation.draft, update, text, question);
             DeletionConfirmation deletion = null;
@@ -185,6 +186,26 @@ public class ConditionConversationService {
             throw new ApiException(HttpStatus.CONFLICT, "PLACE_TYPE_NOT_SUPPORTED", "특정 장소로 지정한 뒤 위치를 검색해 주세요.");
         }
         return place;
+    }
+
+    public ConditionConversationResponse addPlace(UUID id, PlaceAddRequest request) {
+        return withConversation(id, conversation -> {
+            if (conversation.deletion != null) {
+                throw new ApiException(HttpStatus.CONFLICT, "PLACE_DELETE_PENDING", "먼저 장소 삭제를 확인하거나 취소해 주세요.");
+            }
+            var old = conversation.draft;
+            if (!old.conditions().equals(request.expected())) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONDITIONS_CHANGED", "조건이 변경됐어요. 최신 조건을 확인한 뒤 다시 추가해 주세요.");
+            }
+            var places = new java.util.ArrayList<>(old.conditions().places());
+            places.add(new PlaceCondition(UUID.randomUUID().toString(), null, PlaceCondition.TargetType.FIXED_PLACE,
+                    null, null, null, null, null, null));
+            conversation.draft = new ConditionsDraft(new Conditions(old.conditions().maxDeposit(), old.conditions().maxRent(), places),
+                    old.importanceSpecifiedIds(), old.pendingInputs(), List.of("새 장소를 추가했어요. 이름은 선택 사항이며 주소를 선택해 주세요."), old.workOrSchoolIds());
+            conversation.search = null;
+            conversation.lastSuccess = clock.instant();
+            return response(id, conversation);
+        });
     }
 
     public ConditionConversationResponse edit(UUID id, ConditionEditRequest request) {

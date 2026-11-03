@@ -41,4 +41,10 @@ public class ConditionConversationController {
                                                 @Valid @RequestBody PlaceSelectionRequest request) {
         return service.selectPlace(conversationId, placeId, request);
     }
+
+    @PutMapping("/{conversationId}/conditions")
+    public ConditionConversationResponse edit(@PathVariable UUID conversationId,
+                                              @Valid @RequestBody ConditionEditRequest request) {
+        return service.edit(conversationId, request);
+    }
 }

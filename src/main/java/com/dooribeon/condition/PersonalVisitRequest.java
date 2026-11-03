@@ -35,18 +35,20 @@ final class PersonalVisitRequest {
         var added = new ArrayList<ConditionsExtraction.ExtractedPlace>();
         var patches = new ArrayList<ConditionsUpdate.PlaceUpdate>();
         if (matches.isEmpty()) {
-            added.add(new ConditionsExtraction.ExtractedPlace(visit.region() + " " + visit.person(),
-                    PlaceCondition.TargetType.FIXED_PLACE, visit.query(), null, null, false, null, null, null, visit.vague()));
+            added.add(new ConditionsExtraction.ExtractedPlace(visit.person(),
+                    PlaceCondition.TargetType.FIXED_PLACE, visit.query(), null, null, false, null, null, null, visit.vague(), visit.query() == null ? visit.region() : null));
         } else {
             var old = matches.getFirst();
             var fields = new HashSet<String>();
             if (old.targetType() != PlaceCondition.TargetType.FIXED_PLACE) fields.add("targetType");
+            if (visit.query() == null && !visit.region().equals(old.areaHint())) fields.add("areaHint");
             if (old.query() == null && visit.query() != null) fields.add("query");
             boolean unclear = visit.vague() && old.frequency() == null;
             if (unclear) fields.add("frequency");
             if (!fields.isEmpty()) patches.add(new ConditionsUpdate.PlaceUpdate(old.id(), ConditionsUpdate.Action.UPDATE, fields,
                     new ConditionsExtraction.ExtractedPlace(null, fields.contains("targetType") ? PlaceCondition.TargetType.FIXED_PLACE : null,
-                            fields.contains("query") ? visit.query() : null, null, null, false, null, null, null, unclear)));
+                            fields.contains("query") ? visit.query() : null, null, null, false, null, null, null, unclear,
+                            fields.contains("areaHint") ? visit.region() : null)));
         }
         var resolved = new HashSet<String>();
         for (var pending : current.pendingInputs()) {

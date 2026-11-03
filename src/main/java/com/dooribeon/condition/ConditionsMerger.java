@@ -19,7 +19,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class ConditionsMerger {
     private static final Set<String> MONEY_FIELDS = Set.of("maxDeposit", "maxRent");
-    private static final Set<String> PLACE_FIELDS = Set.of("label", "targetType", "query", "role",
+    private static final Set<String> PLACE_FIELDS = Set.of("label", "targetType", "query", "areaHint", "role",
             "importance", "transport", "maxMinutes", "frequency");
     private final ConditionsExtractionService extraction;
     private final ConditionsRules rules;
@@ -76,13 +76,18 @@ public class ConditionsMerger {
                 notices.add("회사·학교 장소는 서비스 기본값으로 중요도를 필수로 설정했어요. 원하시면 바꿀 수 있어요.");
             }
             // 위치나 대상 유형이 바뀌면 예전 검색 결과를 재사용하지 않는다. 이름 변경은 보존한다.
-            boolean locationChanged = (fields.contains("query") && !Objects.equals(old.query(), v.query()))
+            String areaHint = fields.contains("areaHint") ? v.areaHint() : old.areaHint();
+            boolean newArea = areaHint != null && !Objects.equals(old.areaHint(), areaHint);
+            String query = fields.contains("query") ? v.query() : (newArea ? null : old.query());
+            if (areaHint != null && areaHint.equals(query)) query = null;
+            boolean locationChanged = !Objects.equals(old.query(), query) || (newArea && query == null)
                     || (fields.contains("targetType") && old.targetType() != type);
             places.put(old.id(), new PlaceCondition(old.id(), fields.contains("label") ? v.label() : old.label(),
-                    type, fields.contains("query") ? v.query() : old.query(), locationChanged ? null : old.location(),
+                    type, query, locationChanged ? null : old.location(),
                     importance, fields.contains("transport") ? v.transport() : old.transport(),
                     fields.contains("maxMinutes") && !ambiguousTravel ? v.maxMinutes() : old.maxMinutes(),
-                    fields.contains("frequency") && !v.frequencyUnclear() ? v.frequency() : old.frequency()));
+                    fields.contains("frequency") && !v.frequencyUnclear() ? v.frequency() : old.frequency(),
+                    areaHint));
             if (v.frequencyUnclear()) {
                 if (old.frequency() == null) notices.add(ConditionsExtractionService.unclearFrequencyNotice(text, old.label()));
                 else notices.add(ConditionsExtractionService.vagueFrequencyExpression(text) + (old.label() == null ? "장소" : old.label())
@@ -129,6 +134,7 @@ public class ConditionsMerger {
 
     private void validatePlacePatch(Set<String> fields, ExtractedPlace v) {
         declared(fields, "label", v.label());
+        declared(fields, "areaHint", v.areaHint());
         declared(fields, "targetType", v.targetType());
         declared(fields, "query", v.query());
         declared(fields, "role", v.role());

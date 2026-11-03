@@ -61,7 +61,7 @@ public class ConditionsExtractionService {
         String ambiguousTravel = AmbiguousTravelTarget.phrase(text, existingPlaces.size() + extractedPlaces.size());
         if (ambiguousTravel != null) {
             extractedPlaces.replaceAll(p -> new ConditionsExtraction.ExtractedPlace(p.label(), p.targetType(), p.query(), p.role(),
-                    p.importance(), p.importanceSpecified(), p.transport(), null, p.frequency(), p.frequencyUnclear()));
+                    p.importance(), p.importanceSpecified(), p.transport(), null, p.frequency(), p.frequencyUnclear(), p.areaHint()));
             var clarification = new Clarification("conditions", Reason.AMBIGUOUS_INPUT, ambiguousTravel);
             clarifications.remove(clarification);
             clarifications.addFirst(clarification);
@@ -93,7 +93,7 @@ public class ConditionsExtractionService {
         for (var extracted : extractedPlaces) {
             String id = UUID.randomUUID().toString();
             places.add(new PlaceCondition(id, extracted.label(), extracted.targetType(), extracted.query(), null,
-                    extracted.importance(), extracted.transport(), extracted.maxMinutes(), extracted.frequency()));
+                    extracted.importance(), extracted.transport(), extracted.maxMinutes(), extracted.frequency(), extracted.areaHint()));
             if (extracted.role() != null) defaultRequired.add(id);
             if (extracted.importanceSpecified()) userSpecified.add(id);
             if (extracted.frequencyUnclear()) {

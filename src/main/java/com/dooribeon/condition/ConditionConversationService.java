@@ -74,15 +74,7 @@ public class ConditionConversationService {
             validateText(text);
             if (conversation.deletion != null) {
                 if (text.strip().equals(conversation.deletion.confirmationText())) {
-                    String deletedId = conversation.deletion.placeId();
-                    var old = conversation.draft;
-                    var places = old.conditions().places().stream().filter(p -> !p.id().equals(deletedId)).toList();
-                    var specified = new java.util.HashSet<>(old.importanceSpecifiedIds());
-                    specified.remove(deletedId);
-                    var workOrSchool = new java.util.HashSet<>(old.workOrSchoolIds());
-                    workOrSchool.remove(deletedId);
-                    conversation.draft = new ConditionsDraft(new Conditions(old.conditions().maxDeposit(),
-                            old.conditions().maxRent(), places), specified, old.pendingInputs(), java.util.List.of("장소를 삭제했어요."), workOrSchool);
+                    removePlace(conversation, conversation.deletion.placeId());
                     conversation.deletion = null;
                 } else if (text.strip().equals("삭제 취소")) {
                     conversation.deletion = null;
@@ -162,7 +154,7 @@ public class ConditionConversationService {
                             "이 검색 결과에 없는 후보예요. 반환된 후보 번호를 선택해 주세요."));
             var old = conversation.draft;
             var updatedPlace = new PlaceCondition(oldPlace.id(), oldPlace.label(), oldPlace.targetType(), search.query(),
-                    candidate.location(), oldPlace.importance(), oldPlace.transport(), oldPlace.maxMinutes(), oldPlace.frequency());
+                    candidate.location(), oldPlace.importance(), oldPlace.transport(), oldPlace.maxMinutes(), oldPlace.frequency(), oldPlace.areaHint());
             var places = old.conditions().places().stream().map(p -> p.id().equals(placeId) ? updatedPlace : p).toList();
             var draft = new ConditionsDraft(new Conditions(old.conditions().maxDeposit(), old.conditions().maxRent(), places),
                     old.importanceSpecifiedIds(), old.pendingInputs(), List.of("선택한 위치를 반영했어요."), old.workOrSchoolIds());
@@ -186,6 +178,36 @@ public class ConditionConversationService {
             throw new ApiException(HttpStatus.CONFLICT, "PLACE_TYPE_NOT_SUPPORTED", "특정 장소로 지정한 뒤 위치를 검색해 주세요.");
         }
         return place;
+    }
+
+    public ConditionConversationResponse deletePlace(UUID id, String placeId, PlaceDeleteRequest request) {
+        return withConversation(id, conversation -> {
+            if (!conversation.draft.conditions().equals(request.expected())
+                    || conversation.deletion != null && !conversation.deletion.placeId().equals(placeId)) {
+                throw new ApiException(HttpStatus.CONFLICT, "CONDITIONS_CHANGED", "삭제할 장소와 최신 조건을 다시 확인해 주세요.");
+            }
+            var place = conversation.draft.conditions().places().stream().filter(p -> p.id().equals(placeId))
+                    .findFirst().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "이 대화에 해당 장소가 없어요."));
+            if (!(displayName(place) + " 삭제하기").equals(request.confirmationText().strip())) {
+                throw new ApiException(HttpStatus.BAD_REQUEST, "CONFIRM_DELETE", "삭제 확인 문구를 정확히 입력해 주세요.");
+            }
+            removePlace(conversation, placeId);
+            conversation.deletion = null;
+            conversation.lastSuccess = clock.instant();
+            return response(id, conversation);
+        });
+    }
+
+    private void removePlace(Conversation conversation, String deletedId) {
+        var old = conversation.draft;
+        var places = old.conditions().places().stream().filter(p -> !p.id().equals(deletedId)).toList();
+        var specified = new java.util.HashSet<>(old.importanceSpecifiedIds());
+        specified.remove(deletedId);
+        var workOrSchool = new java.util.HashSet<>(old.workOrSchoolIds());
+        workOrSchool.remove(deletedId);
+        conversation.draft = new ConditionsDraft(new Conditions(old.conditions().maxDeposit(),
+                old.conditions().maxRent(), places), specified, old.pendingInputs(), java.util.List.of("장소를 삭제했어요."), workOrSchool);
+        conversation.search = null;
     }
 
     public ConditionConversationResponse addPlace(UUID id, PlaceAddRequest request) {
@@ -233,7 +255,7 @@ public class ConditionConversationService {
                 if (!java.util.Objects.equals(before.importance(), after.importance())) specified.add(before.id());
                 String label = after.label() == null || after.label().isBlank() ? null : after.label().strip();
                 places.add(new PlaceCondition(before.id(), label, before.targetType(), before.query(), before.location(),
-                        after.importance(), after.transport(), after.maxMinutes(), after.frequency()));
+                        after.importance(), after.transport(), after.maxMinutes(), after.frequency(), before.areaHint()));
             }
             var conditions = new Conditions(values.maxDeposit(), values.maxRent(), places);
             if (rules.check(conditions).issues().stream().anyMatch(issue -> issue.kind() == ConditionCheckResult.Kind.INVALID)) {

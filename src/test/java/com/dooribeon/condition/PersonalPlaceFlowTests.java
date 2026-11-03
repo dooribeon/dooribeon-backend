@@ -39,6 +39,8 @@ class PersonalPlaceFlowTests {
             assertThat(current.conditions().places().subList(0, 2)).containsExactlyElementsOf(original.places());
             var friend = current.conditions().places().getLast();
             assertThat(friend.targetType()).isEqualTo(PlaceCondition.TargetType.FIXED_PLACE);
+            assertThat(friend.label()).isEqualTo("친구");
+            assertThat(friend.areaHint()).isEqualTo("수원");
             assertThat(friend.query()).isNull();
             assertThat(friend.location()).isNull();
             assertThat(friend.frequency()).isNull();
@@ -108,7 +110,7 @@ class PersonalPlaceFlowTests {
             assertThat(PersonalVisitRequest.parse(text)).isNull();
         }
         var friend = new PlaceCondition("friend", "수원 친구", PlaceCondition.TargetType.FIXED_PLACE, null, null,
-                null, null, null, new VisitFrequency(VisitFrequency.Period.WEEK, 1));
+                null, null, null, new VisitFrequency(VisitFrequency.Period.WEEK, 1), "수원");
         var old = new ConditionsDraft(new Conditions(2000L, 70L, List.of(friend)), Set.of(), List.of(), List.of());
         var rules = new ConditionsRules();
         var extraction = new ConditionsExtractionService(mock(ConditionsExtractor.class), rules);
@@ -123,6 +125,55 @@ class PersonalPlaceFlowTests {
         var second = new PlaceCondition("second", "부산 친구", null, null, null, null, null, null, null);
         var two = new ConditionsDraft(new Conditions(2000L, 70L, List.of(friend, second)), Set.of(), List.of(), List.of());
         assertThat(PersonalVisitRequest.update(VISIT, two)).isNull();
+    }
+
+    @Test
+    void roleAndAreaAreSeparateInFirstAndLaterMessagesUntilASpecificPlaceIsGiven() {
+        var extractor = mock(ConditionsExtractor.class);
+        var rules = new ConditionsRules();
+        var extraction = new ConditionsExtractionService(extractor, rules);
+        var service = new ConditionConversationService(extractor, extraction, rules, new ConditionsMerger(extraction, rules), mock(PlaceSearchClient.class));
+        var work = new ConditionsExtraction.ExtractedPlace("여의도 회사", PlaceCondition.TargetType.FIXED_PLACE,
+                "여의도", ConditionsExtraction.Role.WORK, null, false, null, null, null, false, "여의도");
+        var home = new ConditionsExtraction.ExtractedPlace("수원 본가", PlaceCondition.TargetType.FIXED_PLACE,
+                null, null, null, false, null, null, null, false, "수원");
+        var lover = new ConditionsExtraction.ExtractedPlace("여자친구 잠실", PlaceCondition.TargetType.FIXED_PLACE,
+                "여자친구 잠실", null, null, false, null, null, null, false, "잠실");
+        when(extractor.extract(anyString())).thenReturn(new ConditionsExtraction(1000L, 70L, List.of(work, home), List.of(), List.of()));
+        var first = service.start("보증금 1000만원 월세 70만원. 여의도 회사, 수원 본가");
+        assertThat(first.conditions().places()).extracting(PlaceCondition::label).containsExactly("회사", "본가");
+        assertThat(first.nextQuestion()).contains("회사", "여의도", "주소");
+        when(extractor.extractUpdate(anyString(), any(), anyString())).thenReturn(new ConditionsUpdate(
+                new ConditionsExtraction(null, null, List.of(lover), List.of(), List.of()), Set.of(), List.of(), Set.of()));
+        var more = service.reply(first.conversationId(), "여자친구가 잠실에 살아");
+        assertThat(more.conditions().places()).allMatch(p -> p.query() == null && p.location() == null);
+        assertThat(more.conditions().places().getLast().label()).isEqualTo("여자친구");
+        assertThat(more.conditions().places().getLast().areaHint()).isEqualTo("잠실");
+        var specific = new ConditionsExtraction.ExtractedPlace("여자친구", PlaceCondition.TargetType.FIXED_PLACE,
+                "잠실역", null, null, false, null, null, null, false, "잠실");
+        assertThat(specific.query()).isEqualTo("잠실역");
+    }
+
+    @Test
+    void cardDeletionChecksTheIdSnapshotAndTypedNameEvenForIdenticallyNamedPlaces() {
+        var extractor = mock(ConditionsExtractor.class);
+        var rules = new ConditionsRules();
+        var extraction = new ConditionsExtractionService(extractor, rules);
+        var service = new ConditionConversationService(extractor, extraction, rules, new ConditionsMerger(extraction, rules), mock(PlaceSearchClient.class));
+        when(extractor.extract(anyString())).thenReturn(new ConditionsExtraction(1000L, 70L,
+                List.of(place("친구", "잠실역", null), place("친구", "수원역", null)), List.of(), List.of()));
+        var first = service.start("보증금 1000만원 월세 70만원. 친구 두 명");
+        var id = first.conversationId();
+        var places = first.conditions().places();
+        var valid = new PlaceDeleteRequest(first.conditions(), "친구 삭제하기");
+        assertThatThrownBy(() -> service.deletePlace(id, places.getLast().id(), new PlaceDeleteRequest(first.conditions(), "교회 삭제하기")))
+                .isInstanceOf(ApiException.class);
+        var once = service.deletePlace(id, places.getLast().id(), valid);
+        assertThat(once.conditions().places()).containsExactly(places.getFirst());
+        assertThatThrownBy(() -> service.deletePlace(id, places.getFirst().id(), valid)).isInstanceOf(ApiException.class);
+        var last = service.deletePlace(id, places.getFirst().id(), new PlaceDeleteRequest(once.conditions(), "친구 삭제하기"));
+        assertThat(last.conditions().places()).isEmpty();
+        assertThat(last.readyForRecommendation()).isTrue();
     }
 
     @Test

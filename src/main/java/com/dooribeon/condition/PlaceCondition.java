@@ -13,6 +13,13 @@ public record PlaceCondition(
         VisitFrequency frequency,
         String areaHint
 ) {
+    public PlaceCondition {
+        // 주변 공원은 채팅·카드·추천 요청 모두 도보 조건으로 취급한다.
+        if (targetType == TargetType.NEARBY_FACILITY && "공원".equals(query)) {
+            transport = Transport.WALK;
+        }
+    }
+
     public PlaceCondition(String id, String label, TargetType targetType, String query, PlaceLocation location,
                           Importance importance, Transport transport, Integer maxMinutes, VisitFrequency frequency) {
         this(id, label, targetType, query, location, importance, transport, maxMinutes, frequency, null);

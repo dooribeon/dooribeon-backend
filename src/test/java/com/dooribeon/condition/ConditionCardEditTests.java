@@ -114,7 +114,29 @@ class ConditionCardEditTests {
                 new Conditions(1000L, 50L, List.of(edited))));
         assertThat(saved.conditions().places().getFirst()).isEqualTo(edited);
         assertThat(service.reply(first.conversationId(), "유지해줘").conditions()).isEqualTo(saved.conditions());
-        assertThat(saved.readyForRecommendation()).isFalse();
+        assertThat(saved.readyForRecommendation()).isTrue();
+        var required = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), null,
+                PlaceCondition.Importance.REQUIRED, null, null, edited.frequency());
+        var needsTime = service.edit(first.conversationId(), new ConditionEditRequest(saved.conditions(),
+                new Conditions(1000L, 50L, List.of(required))));
+        assertThat(needsTime.readyForRecommendation()).isFalse();
+        assertThat(needsTime.nextQuestion()).contains("공원까지 걸어서 최대 몇 분");
+        var timed = new ConditionsExtraction.ExtractedPlace(null, null, null, null, null, false,
+                null, 15, null, false);
+        when(extractor.extractUpdate(eq("15"), any(), anyString())).thenReturn(new ConditionsUpdate(
+                ConditionConversationServiceTests.noChange().values(), Set.of(), List.of(
+                    new ConditionsUpdate.PlaceUpdate(place.id(), ConditionsUpdate.Action.UPDATE,
+                            Set.of("maxMinutes"), timed)), Set.of()));
+        var answered = service.reply(first.conversationId(), "15");
+        assertThat(answered.readyForRecommendation()).isTrue();
+        assertThat(answered.conditions().places().getFirst().maxMinutes()).isEqualTo(15);
+        assertThat(answered.conditions().places().getFirst().transport()).isEqualTo(PlaceCondition.Transport.WALK);
+        var optional = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), null,
+                PlaceCondition.Importance.LOW, PlaceCondition.Transport.PUBLIC_TRANSIT, null, edited.frequency());
+        var noTime = service.edit(first.conversationId(), new ConditionEditRequest(answered.conditions(),
+                new Conditions(1000L, 50L, List.of(optional))));
+        assertThat(noTime.readyForRecommendation()).isTrue();
+        assertThat(service.reply(first.conversationId(), "유지해줘").conditions()).isEqualTo(noTime.conditions());
         assertThatThrownBy(() -> service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(),
                 saved.conditions()))).isInstanceOf(ApiException.class);
     }

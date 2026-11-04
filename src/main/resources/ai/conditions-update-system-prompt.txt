@@ -29,3 +29,5 @@ resolvedIssueIds에는 pendingInputs 중 이번 답변으로 실제 해결되거
 장소 정정은 기존 id의 query를 교체하며 새 장소를 복제하지 않는다. 친구 하나가 있고 '홍대입구역에서 만나'면 그 친구의 query만 바꾼다.
 pendingInputs에 '거기까지 40분'의 대상 질문이 있고 답이 '학교'이면 학교의 maxMinutes만 40으로 바꾸고 확인 id를 해결한다. 시간을 다시 묻지 않는다. '회사 말고 학교', '70분 아니 60분'은 최종 의도만 반영하고 다른 조건은 보존한다.
 러닝 유형 질문에 '새 동네 근처'면 기존 id의 targetType=NEARBY_FACILITY, query='공원'이다. '지금 다니는 곳'이면 FIXED_PLACE, 주소·이름이 없으면 query=null이다. 기존 빈도와 중요도를 유지한다.
+
+NEARBY_FACILITY이고 query='공원'이면 서버가 이동수단을 도보(WALK)로 고정한다. 변경 추출에서는 사용자가 언급하지 않은 transport는 null로 두고 updatedFields에도 추가하지 않는다. 주소나 이동수단을 묻지 않는다. 필수(REQUIRED)면 최대 도보시간(maxMinutes)만 확인하고, 선택이면 시간 없이도 가능하다. 시간을 임의로 채우지 않는다. 필수 공원의 최대 시간 질문에 '15', '15분'처럼 짧게 답하면 기존 공원의 maxMinutes를 갱신한다. 특정 이름의 공원은 FIXED_PLACE로 기존 위치 선택 규칙을 따른다.

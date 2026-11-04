@@ -202,6 +202,13 @@ public class ConditionConversationService {
             if (conversation.draft.conditions().places().stream().noneMatch(p -> p.id().equals(placeId))) {
                 throw new ApiException(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "이 대화에 해당 장소가 없어요.");
             }
+            if (request.confirmationText() != null) {
+                var target = conversation.draft.conditions().places().stream()
+                        .filter(p -> p.id().equals(placeId)).findFirst().orElseThrow();
+                if (!(displayName(target) + " 삭제하기").equals(request.confirmationText().strip())) {
+                    throw new ApiException(HttpStatus.BAD_REQUEST, "CONFIRM_DELETE", "삭제 확인 문구를 정확히 입력해 주세요.");
+                }
+            }
             removePlace(conversation, placeId);
             conversation.deletion = null;
             conversation.lastSuccess = clock.instant();

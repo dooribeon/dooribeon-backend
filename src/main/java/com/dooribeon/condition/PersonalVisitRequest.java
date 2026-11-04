@@ -31,7 +31,7 @@ final class PersonalVisitRequest {
         var visit = parse(text);
         if (visit == null) return null;
         var matches = current.conditions().places().stream().filter(p -> visit.matches(p.label())).toList();
-        if (matches.size() > 1 || matches.size() == 1 && matches.getFirst().location() != null) return null;
+        if (matches.size() > 1) return null;
         var added = new ArrayList<ConditionsExtraction.ExtractedPlace>();
         var patches = new ArrayList<ConditionsUpdate.PlaceUpdate>();
         if (matches.isEmpty()) {
@@ -41,14 +41,18 @@ final class PersonalVisitRequest {
             var old = matches.getFirst();
             var fields = new HashSet<String>();
             if (old.targetType() != PlaceCondition.TargetType.FIXED_PLACE) fields.add("targetType");
-            if (visit.query() == null && !visit.region().equals(old.areaHint())) fields.add("areaHint");
-            if (old.query() == null && visit.query() != null) fields.add("query");
+            if (visit.query() == null && !visit.region().equals(old.areaHint())) {
+                fields.add("areaHint");
+                fields.add("query");
+            }
+            if (visit.query() != null && old.areaHint() != null) fields.add("areaHint");
+            if (visit.query() != null && !visit.query().equals(old.query())) fields.add("query");
             boolean unclear = visit.vague() && old.frequency() == null;
             if (unclear) fields.add("frequency");
             if (!fields.isEmpty()) patches.add(new ConditionsUpdate.PlaceUpdate(old.id(), ConditionsUpdate.Action.UPDATE, fields,
                     new ConditionsExtraction.ExtractedPlace(null, fields.contains("targetType") ? PlaceCondition.TargetType.FIXED_PLACE : null,
                             fields.contains("query") ? visit.query() : null, null, null, false, null, null, null, unclear,
-                            fields.contains("areaHint") ? visit.region() : null)));
+                            fields.contains("areaHint") && visit.query() == null ? visit.region() : null)));
         }
         var resolved = new HashSet<String>();
         for (var pending : current.pendingInputs()) {

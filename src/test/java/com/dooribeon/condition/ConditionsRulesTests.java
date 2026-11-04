@@ -210,6 +210,45 @@ class ConditionsRulesTests {
                 .anySatisfy(issue -> assertThat(issue.path()).isEqualTo("places[1].id"));
     }
 
+    @Test
+    void nearbyParkUsesWalkAndOnlyRequiredParkNeedsTime() {
+        for (var transport : Arrays.asList(null, Transport.PUBLIC_TRANSIT, Transport.WALK)) {
+            for (var importance : Arrays.asList(null, Importance.LOW, Importance.REQUIRED)) {
+                var park = new PlaceCondition("park", "러닝", TargetType.NEARBY_FACILITY, "공원", null,
+                        importance, transport, null, new VisitFrequency(VisitFrequency.Period.WEEK, 4));
+                var result = rules.check(conditions(park));
+                assertThat(result.conditions().places().getFirst().transport()).isEqualTo(Transport.WALK);
+                assertThat(result.conditions().places().getFirst().location()).isNull();
+                assertThat(result.notices()).anyMatch(notice -> notice.contains("도보"));
+                assertThat(result.readyForRecommendation()).isEqualTo(importance != Importance.REQUIRED);
+                if (importance == Importance.REQUIRED) {
+                    assertThat(result.issues()).extracting(ConditionCheckResult.Issue::path)
+                            .containsExactly("places[0].maxMinutes");
+                    assertThat(result.nextQuestion()).isEqualTo("공원까지 걸어서 최대 몇 분이면 괜찮으세요?");
+                }
+            }
+        }
+        for (int minutes : new int[] {-1, 0, 15}) {
+            var park = new PlaceCondition("park", "러닝", TargetType.NEARBY_FACILITY, "공원", null,
+                    Importance.REQUIRED, null, minutes, null);
+            assertThat(rules.check(conditions(park)).readyForRecommendation()).isEqualTo(minutes > 0);
+        }
+        for (String query : Arrays.asList(null, "헬스장", "축구장", "공원주차장")) {
+            var facility = new PlaceCondition("p", "운동", TargetType.NEARBY_FACILITY, query, null,
+                    Importance.REQUIRED, Transport.WALK, 15, null);
+            assertThat(rules.check(conditions(facility)).issues()).anyMatch(issue -> issue.kind() == Kind.UNSUPPORTED);
+        }
+        var fixedPark = new PlaceCondition("park", "보라매공원", TargetType.FIXED_PLACE, "보라매공원", null,
+                Importance.REQUIRED, Transport.PUBLIC_TRANSIT, 15, null);
+        assertThat(rules.check(conditions(fixedPark)).issues()).extracting(ConditionCheckResult.Issue::path)
+                .containsExactly("places[0].location");
+        var nearby = new PlaceCondition("park", "러닝", TargetType.NEARBY_FACILITY, "공원", null,
+                null, null, null, null);
+        assertThat(rules.check(new Conditions(null, 50L, List.of(nearby))).readyForRecommendation()).isFalse();
+        assertThat(rules.check(new Conditions(1000L, 50L, List.of(nearby,
+                place("work", "회사", null, Importance.REQUIRED, null, null)))).readyForRecommendation()).isFalse();
+    }
+
     private Conditions conditions(PlaceCondition place) {
         return new Conditions(1000L, 50L, List.of(place));
     }

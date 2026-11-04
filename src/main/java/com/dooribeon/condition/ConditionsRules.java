@@ -85,11 +85,18 @@ public class ConditionsRules {
         String name = displayName(place);
         if (place.targetType() == null) {
             add(issues, path + ".targetType", Kind.MISSING,
-                    name + "은(는) 계속 다닐 특정 장소인가요, 주변에 있으면 되는 시설인가요?");
+                    name + "은(는) 지금 다니는 특정 장소를 계속 이용하실 건가요, 이사할 동네 근처에서 찾으실 건가요?");
         } else if (place.targetType() == TargetType.NEARBY_FACILITY) {
-            // 아직 정하지 않은 주변 시설 추천을 입력 완료만으로 지원한다고 표시하지 않는다.
-            add(issues, path + ".targetType", Kind.UNSUPPORTED,
-                    "주변 시설 조건은 아직 추천에 연결되지 않았어요. 특정 장소로 지정하거나 조건을 수정해 주세요.");
+            if (!"공원".equals(place.query())) {
+                add(issues, path + ".targetType", Kind.UNSUPPORTED,
+                        "주변 시설은 현재 공원만 지원해요. 특정 장소로 지정하거나 조건을 수정해 주세요.");
+            } else {
+                notices.add("주변 공원까지의 이동시간은 도보로 계산해요.");
+                if (place.importance() == Importance.REQUIRED && place.maxMinutes() == null) {
+                    add(issues, path + ".maxMinutes", Kind.MISSING,
+                            "공원까지 걸어서 최대 몇 분이면 괜찮으세요?");
+                }
+            }
         } else if (place.location() == null) {
             add(issues, path + ".location", Kind.MISSING,
                     place.query() == null ? name + (place.areaHint() == null ? "" : " (" + place.areaHint() + ")")
@@ -125,7 +132,7 @@ public class ConditionsRules {
 
     private void checkMoney(Long amount, String path, String name, List<Issue> issues) {
         if (amount == null) {
-            add(issues, path, Kind.MISSING, name + "은 최대 몇 만원까지 생각하고 있나요?");
+            add(issues, path, Kind.MISSING, name + "은 최대 얼마까지 생각하세요? 예를 들어 '1,000만 원'처럼 알려주세요.");
         } else if (amount < 0 || amount > MAX_SAFE_MONEY) {
             add(issues, path, Kind.INVALID, name + " 금액을 올바른 정수 만원으로 다시 입력해 주세요.");
         }

@@ -101,4 +101,46 @@ class ConditionConversationControllerTests {
         }
         verifyNoInteractions(extractor);
     }
+    @Test
+    void oldAndNewCardDeleteRequestsPreserveValidationAndOtherPlaces() throws Exception {
+        var friend = new ConditionsExtraction.ExtractedPlace("친구", PlaceCondition.TargetType.FIXED_PLACE,
+                "강남역", null, null, false, null, null, null, false);
+        var church = new ConditionsExtraction.ExtractedPlace("교회", PlaceCondition.TargetType.FIXED_PLACE,
+                "교회", null, null, false, null, null, null, false);
+        when(extractor.extract(anyString())).thenReturn(
+                new ConditionsExtraction(1000L, 50L, List.of(friend, church), List.of(), List.of()));
+        var mapper = JsonMapper.builder().build();
+        for (boolean legacy : new boolean[] {true, false}) {
+            var initial = mapper.readTree(mvc.perform(post("/api/conditions/conversations")
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"text\":\"보증금 1000만원 월세 50만원\"}"))
+                    .andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+            String id = initial.get("conversationId").asString();
+            String placeId = initial.get("conditions").get("places").get(0).get("id").asString();
+            String churchId = initial.get("conditions").get("places").get(1).get("id").asString();
+            String path = "/api/conditions/conversations/" + id + "/places/" + placeId + "/delete";
+            String expected = initial.get("conditions").toString();
+            String prefix = "{\"expected\":" + expected;
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(prefix + ",\"unknown\":true}"))
+                    .andExpect(status().isBadRequest());
+            for (String invalid : new String[] {"다른 장소 삭제하기", ""}) {
+                mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                        .content(prefix + ",\"confirmationText\":\"" + invalid + "\"}"))
+                        .andExpect(status().isBadRequest()).andExpect(jsonPath("$.code").value("CONFIRM_DELETE"));
+            }
+            var stale = new Conditions(2000L, 50L, List.of());
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON)
+                    .content("{\"expected\":" + mapper.writeValueAsString(stale) + "}"))
+                    .andExpect(status().isConflict());
+            String request = prefix + (legacy ? ",\"confirmationText\":\"친구 삭제하기\"}" : "}");
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.conditions.places.length()").value(1))
+                    .andExpect(jsonPath("$.conditions.places[0].id").value(churchId))
+                    .andExpect(jsonPath("$.conditions.maxDeposit").value(1000))
+                    .andExpect(jsonPath("$.conditions.maxRent").value(50));
+            mvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(request))
+                    .andExpect(status().isConflict());
+        }
+        verify(extractor, never()).extractUpdate(anyString(), any(), anyString());
+    }
+
 }

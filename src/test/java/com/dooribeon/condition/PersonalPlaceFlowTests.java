@@ -155,7 +155,7 @@ class PersonalPlaceFlowTests {
     }
 
     @Test
-    void cardDeletionChecksTheIdSnapshotAndTypedNameEvenForIdenticallyNamedPlaces() {
+    void cardDeletionChecksTheIdAndSnapshotEvenForIdenticallyNamedPlaces() {
         var extractor = mock(ConditionsExtractor.class);
         var rules = new ConditionsRules();
         var extraction = new ConditionsExtractionService(extractor, rules);
@@ -165,13 +165,13 @@ class PersonalPlaceFlowTests {
         var first = service.start("보증금 1000만원 월세 70만원. 친구 두 명");
         var id = first.conversationId();
         var places = first.conditions().places();
-        var valid = new PlaceDeleteRequest(first.conditions(), "친구 삭제하기");
-        assertThatThrownBy(() -> service.deletePlace(id, places.getLast().id(), new PlaceDeleteRequest(first.conditions(), "교회 삭제하기")))
+        var valid = new PlaceDeleteRequest(first.conditions());
+        assertThatThrownBy(() -> service.deletePlace(id, "missing", valid))
                 .isInstanceOf(ApiException.class);
         var once = service.deletePlace(id, places.getLast().id(), valid);
         assertThat(once.conditions().places()).containsExactly(places.getFirst());
         assertThatThrownBy(() -> service.deletePlace(id, places.getFirst().id(), valid)).isInstanceOf(ApiException.class);
-        var last = service.deletePlace(id, places.getFirst().id(), new PlaceDeleteRequest(once.conditions(), "친구 삭제하기"));
+        var last = service.deletePlace(id, places.getFirst().id(), new PlaceDeleteRequest(once.conditions()));
         assertThat(last.conditions().places()).isEmpty();
         assertThat(last.readyForRecommendation()).isTrue();
     }

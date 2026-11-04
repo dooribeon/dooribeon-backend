@@ -95,4 +95,50 @@ class ConditionCardEditTests {
                 && issue.message().contains("조용한 동네"));
     }
 
+    @Test
+    void nearbyFacilityCanBeEditedWithoutChoosingALocation() {
+        var extractor = mock(ConditionsExtractor.class);
+        var rules = new ConditionsRules();
+        var extraction = new ConditionsExtractionService(extractor, rules);
+        var service = new ConditionConversationService(extractor, extraction, rules,
+                new ConditionsMerger(extraction, rules), mock(PlaceSearchClient.class));
+        var input = new ConditionsExtraction.ExtractedPlace("러닝", PlaceCondition.TargetType.NEARBY_FACILITY,
+                "공원", null, null, false, null, null, new VisitFrequency(VisitFrequency.Period.WEEK, 4), false);
+        when(extractor.extract(anyString())).thenReturn(new ConditionsExtraction(1000L, 50L, List.of(input), List.of(), List.of()));
+        when(extractor.extractUpdate(anyString(), any(), anyString())).thenReturn(ConditionConversationServiceTests.noChange());
+        var first = service.start("보증금 1000만원 월세 50만원 새 동네 근처에서 러닝 주 4회");
+        var place = first.conditions().places().getFirst();
+        var edited = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), null,
+                PlaceCondition.Importance.HIGH, PlaceCondition.Transport.WALK, 15, new VisitFrequency(VisitFrequency.Period.WEEK, 3));
+        var saved = service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(),
+                new Conditions(1000L, 50L, List.of(edited))));
+        assertThat(saved.conditions().places().getFirst()).isEqualTo(edited);
+        assertThat(service.reply(first.conversationId(), "유지해줘").conditions()).isEqualTo(saved.conditions());
+        assertThat(saved.readyForRecommendation()).isTrue();
+        var required = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), null,
+                PlaceCondition.Importance.REQUIRED, null, null, edited.frequency());
+        var needsTime = service.edit(first.conversationId(), new ConditionEditRequest(saved.conditions(),
+                new Conditions(1000L, 50L, List.of(required))));
+        assertThat(needsTime.readyForRecommendation()).isFalse();
+        assertThat(needsTime.nextQuestion()).contains("공원까지 걸어서 최대 몇 분");
+        var timed = new ConditionsExtraction.ExtractedPlace(null, null, null, null, null, false,
+                null, 15, null, false);
+        when(extractor.extractUpdate(eq("15"), any(), anyString())).thenReturn(new ConditionsUpdate(
+                ConditionConversationServiceTests.noChange().values(), Set.of(), List.of(
+                    new ConditionsUpdate.PlaceUpdate(place.id(), ConditionsUpdate.Action.UPDATE,
+                            Set.of("maxMinutes"), timed)), Set.of()));
+        var answered = service.reply(first.conversationId(), "15");
+        assertThat(answered.readyForRecommendation()).isTrue();
+        assertThat(answered.conditions().places().getFirst().maxMinutes()).isEqualTo(15);
+        assertThat(answered.conditions().places().getFirst().transport()).isEqualTo(PlaceCondition.Transport.WALK);
+        var optional = new PlaceCondition(place.id(), place.label(), place.targetType(), place.query(), null,
+                PlaceCondition.Importance.LOW, PlaceCondition.Transport.PUBLIC_TRANSIT, null, edited.frequency());
+        var noTime = service.edit(first.conversationId(), new ConditionEditRequest(answered.conditions(),
+                new Conditions(1000L, 50L, List.of(optional))));
+        assertThat(noTime.readyForRecommendation()).isTrue();
+        assertThat(service.reply(first.conversationId(), "유지해줘").conditions()).isEqualTo(noTime.conditions());
+        assertThatThrownBy(() -> service.edit(first.conversationId(), new ConditionEditRequest(first.conditions(),
+                saved.conditions()))).isInstanceOf(ApiException.class);
+    }
+
 }

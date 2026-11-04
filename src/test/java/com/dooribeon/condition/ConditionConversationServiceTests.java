@@ -63,7 +63,7 @@ class ConditionConversationServiceTests {
     void unitConfirmationKeepsOriginalContextAcrossUnrelatedReplyAndFailure() {
         var service = service(10);
         var first = service.start("월세 50만 원");
-        var pending = service.reply(first.conversationId(), "1000000");
+        var pending = service.reply(first.conversationId(), "10000");
         assertThat(pending.conditions()).isEqualTo(first.conditions());
         assertThat(pending.nextQuestion()).contains("단위");
         verify(extractor, never()).extractUpdate(anyString(), any(), anyString());
@@ -73,7 +73,7 @@ class ConditionConversationServiceTests {
                 .thenAnswer(inv -> {
                     ConditionsDraft draft = inv.getArgument(1);
                     var input = draft.pendingInputs().getFirst();
-                    assertThat(input.sourceText()).isEqualTo("1000000");
+                    assertThat(input.sourceText()).isEqualTo("10000");
                     assertThat(input.question()).contains("보증금");
                     return money(100L, null, "maxDeposit", Set.of(input.id()));
                 });
@@ -172,8 +172,8 @@ class ConditionConversationServiceTests {
                 new ConditionsUpdate(values(null, null), Set.of(), List.of(), Set.of(pending.id())), "응", ""))
                 .isInstanceOf(ApiException.class);
         var guessed = merger.merge(state, money(null, 100L, "maxRent", Set.of()), "월세 1000000", "").draft();
-        assertThat(guessed.conditions()).isEqualTo(state.conditions());
-        assertThat(guessed.check(rules).readyForRecommendation()).isFalse();
+        assertThat(guessed.conditions()).isEqualTo(new Conditions(1000L, 100L, List.of()));
+        assertThat(guessed.check(rules).readyForRecommendation()).isTrue();
     }
 
     @Test

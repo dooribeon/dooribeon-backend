@@ -178,7 +178,9 @@ public class ChatKhuConditionsCodec {
 
     private void checkClarification(Clarification c, Long deposit, Long rent) {
         boolean valid = switch (c.reason()) {
-            case AMOUNT_UNIT_REQUIRED -> c.field().equals("budget") && deposit == null && rent == null;
+            case AMOUNT_UNIT_REQUIRED -> (c.field().equals("budget") && deposit == null && rent == null)
+                    || (c.field().equals("maxDeposit") && deposit == null)
+                    || (c.field().equals("maxRent") && rent == null);
             case INTEGER_MANWON_REQUIRED -> (c.field().equals("maxDeposit") && deposit == null)
                     || (c.field().equals("maxRent") && rent == null);
             case NET_RENT_REQUIRED -> c.field().equals("maxRent") && rent == null;

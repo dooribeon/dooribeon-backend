@@ -71,15 +71,15 @@ class ConditionsExtractionServiceTests {
     }
 
     @Test
-    void guessedUnitlessAmountsAreClearedEvenIfAiForgotConfirmation() {
+    void unitlessAmountsAreAppliedWithANotice() {
         when(extractor.extract("보증금 1000 월세 50"))
                 .thenReturn(extraction(1000L, 50L, List.of(), List.of()));
         var result = service.parse("보증금 1000 월세 50");
-        assertThat(result.conditions().maxDeposit()).isNull();
-        assertThat(result.conditions().maxRent()).isNull();
-        assertThat(result.readyForRecommendation()).isFalse();
-        assertThat(result.issues()).hasSize(1);
-        assertThat(result.nextQuestion()).contains("단위");
+        assertThat(result.conditions().maxDeposit()).isEqualTo(1000L);
+        assertThat(result.conditions().maxRent()).isEqualTo(50L);
+        assertThat(result.readyForRecommendation()).isTrue();
+        assertThat(result.notices()).hasSize(2);
+
     }
 
     @Test

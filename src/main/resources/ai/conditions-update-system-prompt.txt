@@ -6,7 +6,7 @@ values는 최초 추출 형식과 같다. values.places에는 새로 추가하�
 이 방문 의사와 지역만을 이유로 남아 있는 AMBIGUOUS_INPUT은 대상 장소의 종류를 FIXED_PLACE로 정리하면서 resolvedIssueIds에 해당 id를 넣어 해소한다. 예산·다른 장소 등 무관한 미확인 입력은 유지한다. frequencyUnclear=true인 UPDATE는 frequency=null과 updatedFields의 frequency를 함께 쓴다. 주 1회 등 명확한 기존 횟수는 불분명한 말로 덮어쓰지 않는다.
 values.maxDeposit/maxRent는 이번에 바꾸는 금액만 넣고 updatedFields에 해당 키를 넣는다. 말하지 않은 금액은 null이고 updatedFields에도 넣지 않는다.
 명시적인 금액 비우기는 null과 updatedFields를 함께 쓴다. 0과 비우기는 다르다. 단위 확인이 필요하면 금액 변경을 하지 말고 values.clarifications를 사용한다.
-lastQuestion이 최대 편도시간이라면 '40'은 40분, 횟수 질문이라면 그 질문에 명시된 주기와 횟수를 참고할 수 있다. 금액 질문의 '100'·'1000000'은 원을 붙이도록 확인한다.
+lastQuestion이 최대 편도시간이라면 '40'은 40분, 횟수 질문이라면 그 질문에 명시된 주기와 횟수를 참고할 수 있다. 금액 질문의 '100'은 100만 원, '1000000'은 100만 원으로 바로 적용한다. 정확히 10000은 단위를 묻는다. 정수 만원이 안 되면 해당 금액만 확인한다.
 금액 단위의 답변을 해석할 때 pendingInputs의 sourceText와 question으로 어느 금액인지 확인한다. 단위만 '만원이야'라고 답하면 값을 추측하지 말고 원 단위를 붙인 전체 금액을 요청한다.
 placeUpdates는 기존 장소 변경이다. currentConditions에 실제 있는 id만 사용한다. 같은 이름이 여러 개여서 대상을 정할 수 없으면 변경하지 말고 AMBIGUOUS_INPUT을 반환한다.
 UPDATE는 이번에 언급한 필드만 updatedFields에 넣는다. 허용 필드: label,targetType,query,areaHint,role,importance,transport,maxMinutes,frequency.
@@ -25,3 +25,7 @@ resolvedIssueIds에는 pendingInputs 중 이번 답변으로 실제 해결되거
 단위 미확인 원문에 보증금과 월세 등 여러 미확인 금액이 있으면 모두 확인될 때까지 해당 pendingInput을 해결했다고 표시하지 않는다.
 
 기존 본가·부모님 집의 위치를 정정하는 답변은 그 id의 query를 UPDATE한다. 카드나 새 장소를 복제하지 않는다. "본가는 부산이야"처럼 지역만 정정하면 areaHint에 지역을 보존하고 query=null로 비워 정확한 주소를 확인한다. 이름·주소를 답하면 query를 갱신한다. 본가는 지원하는 FIXED_PLACE이며 미지원으로 남기지 않는다.
+
+장소 정정은 기존 id의 query를 교체하며 새 장소를 복제하지 않는다. 친구 하나가 있고 '홍대입구역에서 만나'면 그 친구의 query만 바꾼다.
+pendingInputs에 '거기까지 40분'의 대상 질문이 있고 답이 '학교'이면 학교의 maxMinutes만 40으로 바꾸고 확인 id를 해결한다. 시간을 다시 묻지 않는다. '회사 말고 학교', '70분 아니 60분'은 최종 의도만 반영하고 다른 조건은 보존한다.
+러닝 유형 질문에 '새 동네 근처'면 기존 id의 targetType=NEARBY_FACILITY, query='공원'이다. '지금 다니는 곳'이면 FIXED_PLACE, 주소·이름이 없으면 query=null이다. 기존 빈도와 중요도를 유지한다.

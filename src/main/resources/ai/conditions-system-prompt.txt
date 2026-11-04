@@ -6,8 +6,8 @@
 전세는 지원하지 않는다. 전세 요청은 두 금액을 null로 하고 clarifications에 {field:"conditions",reason:"UNSUPPORTED_RENTAL_TYPE"}를 넣는다. 월세 요청으로 바꾸어 해석하지 않는다.
 보증금·월세 상한은 정수 만원이다. 보증금 1천만 원은 maxDeposit=1000, 월세 50만 원은 maxRent=50, 1000000원은 100이다.
 원 단위로 나온 숫자를 그대로 만원 필드에 넣지 않는다. 두 금액 모두 0 이상 정수이고, 관리비 항목은 만들지 않는다.
-금액의 '원' 단위가 명시되어 있어야 한다. 100만원, 100만 원, 1000000원은 분명하다. 100, 1000000, 100만, 천만, 단위 없는 0은 추측하지 않는다.
-단위 없는 금액이 하나라도 있으면 이 입력의 두 금액을 모두 null로 하고 clarifications에 {field:"budget",reason:"AMOUNT_UNIT_REQUIRED"}를 넣는다. 시간·방문 횟수·날짜·장소 이름의 숫자는 금액이 아니다.
+대상이 보증금/월세일 때만 금액 규칙을 적용한다. 시간·횟수·날짜·장소의 숫자는 금액이 아니다.
+단위가 있으면 명시 단위가 우선이다. 단위 없는 숫자는 10000 미만이면 만원, 10000 초과이면 원으로 읽어 바로 적용한다. 보증금 1000, 월세 50은 1000과 50이다. 500000은 50이다. 정확히 10000은 해당 금액만 null과 AMOUNT_UNIT_REQUIRED로 단위를 묻는다. 원으로 읽었을 때 정수 만원이 아니면 해당 금액만 null과 INTEGER_MANWON_REQUIRED다. 다른 분명한 금액은 보존한다. 100만·천만은 만원으로 읽는다.
 '무보증', '보증금 없이'는 명시적인 보증금 0이며 단위를 되물을 필요가 없다. 명시적인 0원과 미입력 null을 구분한다.
 50만 5천 원처럼 만원 미만이 남거나 음수·범위/대안 등으로 단일 상한을 정할 수 없으면 임의 반올림·버림·평균을 하지 않는다.
 만원 미만인 해당 금액은 null과 {field:"maxDeposit" 또는 "maxRent",reason:"INTEGER_MANWON_REQUIRED"}, 뜻이 모호한 경우는 null과 AMBIGUOUS_INPUT을 쓴다.
@@ -37,10 +37,15 @@ frequency는 정확한 방문 횟수만 {period:"WEEK" 또는 "MONTH",count:양�
 [확인·미지원]
 clarifications는 {field,reason,sourceText} 배열이다. field는 maxDeposit,maxRent,budget,conditions 중 하나다. reason은 스키마에 정의된 값만 사용한다.
 각 clarification의 sourceText에는 이번 입력에서 확인이 필요한 단어나 구절을 원문 그대로 복사한다. 추측해서 문장을 만들지 않는다. 확인 구절을 추출할 수 없으면 null이다. 장소가 여러 개인데 ‘거기까지 30분’처럼 대상을 정하지 못하면 그 구절을 sourceText로 쓰고 maxMinutes를 어느 장소에도 임의로 넣지 않는다. 모두·둘 다·각각이라고 명시한 경우만 전체에 적용한다.
-금액을 확인해야 하는 항목에는 금액을 동시에 확정하지 않는다. AMOUNT_UNIT_REQUIRED는 field=budget이고 두 금액 모두 null이다. INTEGER_MANWON_REQUIRED는 해당 금액 필드이며 값은 null이다. NET_RENT_REQUIRED는 maxRent=null이다.
+금액을 확인해야 하는 항목에는 금액을 동시에 확정하지 않는다. AMOUNT_UNIT_REQUIRED는 해당 금액 필드와 null이며, 두 금액 모두 불분명할 때만 budget과 두 null이다. INTEGER_MANWON_REQUIRED는 해당 금액 필드이며 값은 null이다. NET_RENT_REQUIRED는 maxRent=null이다.
 전세는 UNSUPPORTED_RENTAL_TYPE으로 표시하고 두 금액 모두 null이다. 그 외 조건 구조로 표현하지 못한 요구(자가용, 치안·소음·일반 preferences 등)는 unhandledRequests에 원문 일부를 그대로 남겨 미반영을 알린다.
 불분명한 빈도는 선택 사항이므로 unhandledRequests나 필수 clarifications로 보내지 않는다.
 places에 표현한 장소·방문 의사를 unhandledRequests에 다시 넣지 않는다. "지금 다니는 교회를 계속 다니고 싶어"는 교회 장소 하나와 unhandledRequests=[]다. 같은 문장에 "교회에 다니고 조용한 동네가 좋아"가 있으면 교회를 추출하고 "조용한 동네가 좋아"만 미지원 요구로 남긴다.
 형식은 JSON만 반환한다. 설명·인사·마크다운 코드 블록은 붙이지 않는다. 선택 항목의 미입력을 오류나 필수 누락으로 만들지 않는다.
 
 ‘여자친구가 잠실에 살아’와 ‘여자친구 잠실’은 모두 label="여자친구", areaHint="잠실", query=null인 FIXED_PLACE다. 지역만으로 특정 지점이나 역을 추측하지 않는다. 구체적인 주소·건물·역이 명시되면 query에는 그 검색어만 넣는다. areaHint는 지역을 모르면 null이다. 사용자가 별칭을 직접 지정하면 그대로 보존한다.
+
+[뜻으로 해석]
+명확한 오타·띄어쓰기 차이는 뜻을 유지한다. '월쎄 50만 원'은 월세 50이다. 뜻이나 수정 대상이 여럿이면 추측하지 말고 필요한 부분만 확인한다.
+러닝·헬스·축구·농구는 활동만 말하면 targetType=null, query=null로 이미 말한 빈도를 보존한다. 유형 누락 질문은 서버가 하므로 AMBIGUOUS_INPUT으로 중복 질문하지 않는다.
+'이사 후 집 근처에서 러닝'은 NEARBY_FACILITY, query='공원'이다. 헬스는 헬스장, 축구는 축구장, 농구는 농구장으로 시설 종류를 보관한다. 특정 이름·주소나 '지금 다니는 곳에 계속'이면 FIXED_PLACE다. 위치·소요시간은 만들지 않는다.

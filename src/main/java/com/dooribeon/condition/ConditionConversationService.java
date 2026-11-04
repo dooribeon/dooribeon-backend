@@ -88,12 +88,25 @@ public class ConditionConversationService {
             ConditionsUpdate update;
             boolean moneyQuestion = !previous.issues().isEmpty()
                     && java.util.Set.of("maxDeposit", "maxRent", "budget").contains(previous.issues().getFirst().path());
-            if (moneyQuestion && AmountUnitPolicy.isBareAmountWithoutWon(text)) {
+            if (moneyQuestion && BudgetInputPolicy.isNumericReply(text)) {
                 // 숫자만 답해도 시간·빈도 질문이면 이 경로로 들어오지 않는다.
-                update = new ConditionsUpdate(new ConditionsExtraction(null, null, java.util.List.of(),
-                        java.util.List.of(new ConditionsExtraction.Clarification("budget",
-                                ConditionsExtraction.Reason.AMOUNT_UNIT_REQUIRED)), java.util.List.of()),
-                        java.util.Set.of(), java.util.List.of(), java.util.Set.of());
+                String field = previous.issues().getFirst().path();
+                if (field.equals("budget")) {
+                    update = extractor.extractUpdate(text, conversation.draft, question);
+                } else {
+                    var empty = new ConditionsExtraction(null, null, List.of(), List.of(), List.of());
+                    var amount = BudgetInputPolicy.read(text, question, empty);
+                    var resolved = new java.util.HashSet<String>();
+                    if (amount.questions().isEmpty() && amount.handled().contains(field)) {
+                        conversation.draft.pendingInputs().stream()
+                                .filter(p -> p.issue().path().equals(field)
+                                        && (p.reason() == ConditionsExtraction.Reason.AMOUNT_UNIT_REQUIRED
+                                            || p.reason() == ConditionsExtraction.Reason.INTEGER_MANWON_REQUIRED))
+                                .forEach(p -> resolved.add(p.id()));
+                    }
+                    update = new ConditionsUpdate(new ConditionsExtraction(amount.deposit(), amount.rent(),
+                            List.of(), List.of(), List.of()), java.util.Set.of(field), List.of(), resolved);
+                }
             } else {
                 update = PersonalVisitRequest.update(text, conversation.draft);
                 if (update == null) update = extractor.extractUpdate(text, conversation.draft, question);
@@ -186,10 +199,8 @@ public class ConditionConversationService {
                     || conversation.deletion != null && !conversation.deletion.placeId().equals(placeId)) {
                 throw new ApiException(HttpStatus.CONFLICT, "CONDITIONS_CHANGED", "삭제할 장소와 최신 조건을 다시 확인해 주세요.");
             }
-            var place = conversation.draft.conditions().places().stream().filter(p -> p.id().equals(placeId))
-                    .findFirst().orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "이 대화에 해당 장소가 없어요."));
-            if (!(displayName(place) + " 삭제하기").equals(request.confirmationText().strip())) {
-                throw new ApiException(HttpStatus.BAD_REQUEST, "CONFIRM_DELETE", "삭제 확인 문구를 정확히 입력해 주세요.");
+            if (conversation.draft.conditions().places().stream().noneMatch(p -> p.id().equals(placeId))) {
+                throw new ApiException(HttpStatus.NOT_FOUND, "PLACE_NOT_FOUND", "이 대화에 해당 장소가 없어요.");
             }
             removePlace(conversation, placeId);
             conversation.deletion = null;
@@ -248,7 +259,8 @@ public class ConditionConversationService {
                 var before = previous.get(i);
                 var after = values.places().get(i);
                 if (after == null || !before.id().equals(after.id())) throw invalidEdit();
-                if (before.location() == null && (!java.util.Objects.equals(before.importance(), after.importance())
+                if (before.targetType() != PlaceCondition.TargetType.NEARBY_FACILITY
+                        && before.location() == null && (!java.util.Objects.equals(before.importance(), after.importance())
                         || before.transport() != after.transport()
                         || !java.util.Objects.equals(before.maxMinutes(), after.maxMinutes())
                         || !java.util.Objects.equals(before.frequency(), after.frequency()))) throw invalidEdit();

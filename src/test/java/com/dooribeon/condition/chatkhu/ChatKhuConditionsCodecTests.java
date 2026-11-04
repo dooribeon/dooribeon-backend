@@ -178,7 +178,7 @@ class ChatKhuConditionsCodecTests {
         assertThat(result.clarifications().getFirst().reason()).isEqualTo(Reason.AMOUNT_UNIT_REQUIRED);
         for (String content : List.of(emptyPlaces("1000", "null", unit),
                 emptyPlaces("null", "50", unit),
-                emptyPlaces("null", "null", unit.replace("\"budget\"", "\"maxRent\"")),
+                emptyPlaces("null", "50", unit.replace("\"budget\"", "\"maxRent\"")),
                 emptyPlaces("null", "null", unit.replace("AMOUNT_UNIT_REQUIRED", "UNKNOWN")),
                 emptyPlaces("null", "null", "[" + unit.substring(1, unit.length() - 1) + ","
                         + unit.substring(1, unit.length() - 1) + "]"))) {

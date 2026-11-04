@@ -37,7 +37,8 @@ public class ConditionsMerger {
         var added = extraction.prepare(values, text, question, current.conditions().places());
         boolean ambiguousTravel = AmbiguousTravelTarget.phrase(text,
                 current.conditions().places().size() + added.conditions().places().size()) != null;
-        var changed = update.updatedFields();
+        var changed = new HashSet<>(update.updatedFields());
+        changed.addAll(BudgetInputPolicy.read(text, question, values).handled());
         Long deposit = changed.contains("maxDeposit") && !blocked(added, "maxDeposit")
                 ? added.conditions().maxDeposit() : current.conditions().maxDeposit();
         Long rent = changed.contains("maxRent") && !blocked(added, "maxRent")

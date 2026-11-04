@@ -17,8 +17,6 @@ import org.springframework.stereotype.Service;
 /** 최초 문장 → AI 추출 → 서버 id·기본값 → 입력 검사. */
 @Service
 public class ConditionsExtractionService {
-    private static final Pattern WON = Pattern.compile("[0-9영공일이삼사오육칠팔구십백천만억조]\\s*원");
-    private static final Pattern NO_DEPOSIT = Pattern.compile("무보증|보증금\\s*(?:은|이|도)?\\s*(?:없이|없)");
     private final ConditionsExtractor extractor;
     private final ConditionsRules rules;
 
@@ -46,17 +44,15 @@ public class ConditionsExtractionService {
                             List<PlaceCondition> existingPlaces) {
         if (extraction == null) throw ApiException.invalidAiResponse();
         List<Clarification> clarifications = new ArrayList<>(extraction.clarifications());
-        Long deposit = extraction.maxDeposit();
-        Long rent = extraction.maxRent();
-        // 원 단위가 전혀 없는데 AI가 금액을 추측했다면 서버에서도 확정을 막는다.
-        boolean explicitNoDepositOnly = Long.valueOf(0).equals(deposit) && rent == null
-                && NO_DEPOSIT.matcher(text).find();
-        if ((deposit != null || rent != null) && !WON.matcher(text).find() && !explicitNoDepositOnly) {
-            deposit = null;
-            rent = null;
-            var unit = new Clarification("budget", Reason.AMOUNT_UNIT_REQUIRED);
-            if (!clarifications.contains(unit)) clarifications.add(unit);
+        var amounts = BudgetInputPolicy.read(text, question, extraction);
+        Long deposit = amounts.deposit();
+        Long rent = amounts.rent();
+        clarifications.removeIf(c -> amounts.handled().contains(c.field())
+                && (c.reason() == Reason.AMOUNT_UNIT_REQUIRED || c.reason() == Reason.INTEGER_MANWON_REQUIRED));
+        if (amounts.handled().containsAll(java.util.Set.of("maxDeposit", "maxRent"))) {
+            clarifications.removeIf(c -> c.field().equals("budget") && c.reason() == Reason.AMOUNT_UNIT_REQUIRED);
         }
+        clarifications.addAll(amounts.questions());
         var extractedPlaces = new ArrayList<>(extraction.places());
         String ambiguousTravel = AmbiguousTravelTarget.phrase(text, existingPlaces.size() + extractedPlaces.size());
         if (ambiguousTravel != null) {
@@ -105,7 +101,15 @@ public class ConditionsExtractionService {
         List<ConditionsDraft.PendingInput> pending = new ArrayList<>(familyConfirmations);
         for (Clarification c : clarifications) {
             if (c.sourceText() != null && !text.contains(c.sourceText())) throw ApiException.invalidAiResponse();
-            pending.add(ConditionsDraft.PendingInput.create(toIssue(c, text, ambiguousTravel), c.reason(), text, question));
+            Issue issue = toIssue(c, text, ambiguousTravel);
+            if (c.reason() == Reason.AMBIGUOUS_INPUT && ambiguousTravel != null) {
+                var names = new ArrayList<String>();
+                existingPlaces.forEach(p -> names.add(p.label() == null ? "이름 없는 장소" : p.label()));
+                places.forEach(p -> names.add(p.label() == null ? "이름 없는 장소" : p.label()));
+                issue = new Issue(c.field(), Kind.NEEDS_CONFIRMATION,
+                        "‘" + ambiguousTravel + "’의 편도시간은 " + String.join(", ", names) + " 중 어느 장소까지인가요? 장소 이름을 알려주세요.");
+            }
+            pending.add(ConditionsDraft.PendingInput.create(issue, c.reason(), text, question));
         }
         for (String fragment : extraction.unhandledRequests()) {
             if (!text.contains(fragment)) throw ApiException.invalidAiResponse();
@@ -116,6 +120,7 @@ public class ConditionsExtractionService {
         }
         List<String> notices = new ArrayList<>(checked.notices());
         notices.addAll(extraNotices);
+        notices.addAll(amounts.notices());
         return new ConditionsDraft(checked.conditions(), userSpecified, pending, notices, defaultRequired);
     }
 
@@ -158,7 +163,7 @@ public class ConditionsExtractionService {
         String source = c.sourceText() == null ? text : c.sourceText();
         if (source.length() > 200) source = source.substring(0, 200) + "…";
         String message = switch (c.reason()) {
-            case AMOUNT_UNIT_REQUIRED -> "금액 단위를 확인할게요. '100만 원'처럼 원 단위를 붙여 알려주세요.";
+            case AMOUNT_UNIT_REQUIRED -> "이 금액은 원과 만원 중 어느 단위인가요? '1만 원' 또는 '1억 원'처럼 알려주세요.";
             case INTEGER_MANWON_REQUIRED -> "금액은 만원 단위 정수로 입력해 주세요. 만원 미만 금액을 반올림하지는 않아요.";
             case NET_RENT_REQUIRED -> "관리비를 제외한 월세는 최대 얼마까지 생각하고 있나요?";
             case UNSUPPORTED_RENTAL_TYPE -> "지금은 월세 조건을 지원해요. 월세로 찾으실지 확인해 주세요.";
@@ -167,6 +172,8 @@ public class ConditionsExtractionService {
                     ? "어느 장소까지의 편도시간인가요? 장소 이름과 시간을 함께 알려주세요."
                     : "어느 금액이나 장소, 편도시간을 뜻하는지 구체적으로 알려주세요.");
         };
+        if (c.field().equals("maxDeposit")) message = "보증금 " + message;
+        if (c.field().equals("maxRent")) message = "월세 " + message;
         return new Issue(c.field(), c.reason() == Reason.UNSUPPORTED_RENTAL_TYPE
                 ? Kind.UNSUPPORTED : Kind.NEEDS_CONFIRMATION, message);
     }

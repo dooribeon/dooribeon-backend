@@ -30,7 +30,7 @@ class ConditionControllerTests {
                 .andExpect(status().isOk()).andExpect(jsonPath("$.conditions.maxRent").value(60))
                 .andExpect(jsonPath("$.readyForRecommendation").value(false))
                 .andExpect(jsonPath("$.issues[0].path").value("maxDeposit"))
-                .andExpect(jsonPath("$.nextQuestion").value("보증금은 최대 몇 만원까지 생각하고 있나요?"));
+                .andExpect(jsonPath("$.nextQuestion").value("보증금은 최대 얼마까지 생각하세요? 예를 들어 '1,000만 원'처럼 알려주세요."));
     }
 
     @Test
@@ -50,12 +50,12 @@ class ConditionControllerTests {
     }
 
     @Test
-    void firstInputWithoutUnitsReturnsAQuestionAndNeverInventsRent() throws Exception {
+    void unitlessRentIsAppliedAndMissingDepositIsAsked() throws Exception {
         when(extractor.extract("월세 1000000")).thenReturn(new ConditionsExtraction(null, 100L, java.util.List.of(), java.util.List.of(), java.util.List.of()));
         mvc.perform(post("/api/conditions/parse").contentType(MediaType.APPLICATION_JSON)
                         .content("{\"text\":\"월세 1000000\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.readyForRecommendation").value(false))
-                .andExpect(jsonPath("$.conditions.maxRent").value(org.hamcrest.Matchers.nullValue()))
-                .andExpect(jsonPath("$.nextQuestion").value(org.hamcrest.Matchers.containsString("단위")));
+                .andExpect(jsonPath("$.conditions.maxRent").value(100))
+                .andExpect(jsonPath("$.nextQuestion").value(org.hamcrest.Matchers.containsString("보증금")));
     }
 }

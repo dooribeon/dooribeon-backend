@@ -27,8 +27,13 @@ final class BudgetInputPolicy {
         var match = LABELLED.matcher(text);
         while (match.find()) {
             budgetNumberStarts.add(match.start(2));
-            tokens.put(match.group(1).equals("보증금") ? "maxDeposit" : "maxRent",
-                    new String[] {match.group(2), match.group(3)});
+            String field = match.group(1).equals("보증금") ? "maxDeposit" : "maxRent";
+            // 같은 항목의 여러 금액은 순서로 상한을 정하지 않는다.
+            if (tokens.containsKey(field)) {
+                return new Result(extraction.maxDeposit(), extraction.maxRent(), Set.of(), List.of(),
+                        correctionNotices(text, extraction));
+            }
+            tokens.put(field, new String[] {match.group(2), match.group(3)});
         }
         // 이름 붙은 금액 외에 숫자가 더 있으면 현재 지출과 희망 예산 등의 관계를 AI가 판단한다.
         // 서버가 문장 일부의 숫자로 최종 추출값을 덮어쓰지 않는다.

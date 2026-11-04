@@ -141,13 +141,17 @@ class ConversationInterpretationTests {
 
     @Test
     void currentRentDoesNotReplaceTheDesiredMaximumInInitialOrFollowupInput() {
-        String text = "지금 월세 80만원 내는데 이사하면 60만원 이하로 찾고 싶어";
-        when(extractor.extract(text)).thenReturn(values(null, 60L));
-        assertThat(extraction.parse(text).conditions().maxRent()).isEqualTo(60);
-        var current = new ConditionsDraft(new Conditions(1000L, 50L, List.of()), Set.of(), List.of(), List.of());
-        var update = new ConditionsUpdate(values(null, 60L), Set.of("maxRent"), List.of(), Set.of());
-        var result = merger.merge(current, update, text, "").draft().conditions();
-        assertThat(result).isEqualTo(new Conditions(1000L, 60L, List.of()));
+        for (String text : List.of(
+                "지금 월세 80만원 내는데 이사하면 60만원 이하로 찾고 싶어",
+                "지금 월세 80만원, 희망 월세 60만원",
+                "희망 월세 60만원, 지금 월세 80만원")) {
+            when(extractor.extract(text)).thenReturn(values(null, 60L));
+            assertThat(extraction.parse(text).conditions().maxRent()).isEqualTo(60);
+            var current = new ConditionsDraft(new Conditions(1000L, 50L, List.of()), Set.of(), List.of(), List.of());
+            var update = new ConditionsUpdate(values(null, 60L), Set.of("maxRent"), List.of(), Set.of());
+            var result = merger.merge(current, update, text, "").draft().conditions();
+            assertThat(result).isEqualTo(new Conditions(1000L, 60L, List.of()));
+        }
     }
 
     @Test
@@ -162,6 +166,18 @@ class ConversationInterpretationTests {
             assertThat(merger.merge(current, update, text, "").draft().conditions())
                     .isEqualTo(new Conditions(10000L, 50L, List.of()));
         }
+    }
+
+    @Test
+    void repeatedAmountsKeepClarificationWhenTheAiCannotChooseAMaximum() {
+        String text = "월세 60만원 월세 80만원 중 고민이야";
+        var unclear = new ConditionsExtraction(null, null, List.of(),
+                List.of(new ConditionsExtraction.Clarification("maxRent", ConditionsExtraction.Reason.AMBIGUOUS_INPUT)),
+                List.of());
+        var checked = extraction.prepare(unclear, text, "").check(rules);
+        assertThat(checked.conditions().maxRent()).isNull();
+        assertThat(checked.readyForRecommendation()).isFalse();
+        assertThat(checked.issues()).anyMatch(i -> i.path().equals("maxRent"));
     }
 
 }

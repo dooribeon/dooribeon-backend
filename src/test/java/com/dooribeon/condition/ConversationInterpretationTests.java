@@ -18,7 +18,7 @@ class ConversationInterpretationTests {
 
     @Test
     void mixedUnitsAndParkNeverConfirmAnAmbiguousDeposit() {
-        for (String text : List.of("보증금 10000, 월세 50만 원", "보증금 10000, 월세 50, 공원 근처")) {
+        for (String text : List.of("보증금 10000, 월세 50만 원", "보증금 10000, 월세 50.")) {
             var result = extraction.prepare(values(10000L, 50L), text, "").check(rules);
             assertThat(result.conditions().maxDeposit()).isNull();
             assertThat(result.conditions().maxRent()).isEqualTo(50);
@@ -178,6 +178,32 @@ class ConversationInterpretationTests {
         assertThat(checked.conditions().maxRent()).isNull();
         assertThat(checked.readyForRecommendation()).isFalse();
         assertThat(checked.issues()).anyMatch(i -> i.path().equals("maxRent"));
+    }
+
+    @Test
+    void koreanDesiredRentAndCurrentExpenseArePreservedRegardlessOfOrder() {
+        for (String text : List.of("지금 월세 80만원 내는데 이사하면 육십만 원 이하로 찾고 싶어",
+                "희망 월세는 육십만원, 지금 월세 80만원이야")) {
+            var checked = extraction.prepare(values(null, 60L), text, "").check(rules);
+            assertThat(checked.conditions().maxRent()).isEqualTo(60);
+            var current = new ConditionsDraft(new Conditions(1000L, 50L, List.of()), Set.of(), List.of(), List.of());
+            var update = new ConditionsUpdate(values(null, 60L), Set.of("maxRent"), List.of(), Set.of());
+            assertThat(merger.merge(current, update, text, "").draft().conditions())
+                    .isEqualTo(new Conditions(1000L, 60L, List.of()));
+        }
+    }
+
+    @Test
+    void amountInAClearRequestIsNeverReintroducedAndOtherBudgetIsKept() {
+        var current = new ConditionsDraft(new Conditions(1000L, 50L, List.of()), Set.of(), List.of(), List.of());
+        for (String text : List.of("월세 50만원 지워줘", "월세 50만원 조건을 지워줘", "월세 50만원 삭제해줘")) {
+            var clear = new ConditionsUpdate(values(null, null), Set.of("maxRent"), List.of(), Set.of());
+            var result = merger.merge(current, clear, text, "").draft().check(rules);
+            assertThat(result.conditions()).isEqualTo(new Conditions(1000L, null, List.of()));
+            assertThat(result.readyForRecommendation()).isFalse();
+            assertThat(result.nextQuestion()).contains("월세");
+            assertThat(result.notices()).isEmpty();
+        }
     }
 
 }

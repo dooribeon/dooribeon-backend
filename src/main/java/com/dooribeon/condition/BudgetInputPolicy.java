@@ -15,6 +15,9 @@ final class BudgetInputPolicy {
             + "(?![0-9]|[.,][0-9])\\s*(만원|만\\s*원|원)?(?!\\s*[십백천만억조원])(?=$|[\\s,.!?]|이하|이내|이야|이요|요|으로|로|이고|까지)");
     private static final Pattern BARE = Pattern.compile("^\\s*" + NUMBER + "\\s*(?:이야|이요|요|입니다)?[.!]?\\s*$");
 
+    private static final Pattern SIMPLE_REMAINDER = Pattern.compile(
+            "(?:\\s|[,.;!?]|이하|이내|까지|이야|이요|요|입니다|으로|로|해줘|해주세요)*");
+
     static boolean isNumericReply(String text) { return BARE.matcher(text).matches(); }
 
     static Result read(String text, String question, ConditionsExtraction extraction) {
@@ -23,10 +26,8 @@ final class BudgetInputPolicy {
         if (Pattern.compile("아니|말고|정정|취소|또는|~|∼").matcher(text).find()) {
             return new Result(extraction.maxDeposit(), extraction.maxRent(), Set.of(), List.of(), correctionNotices(text, extraction));
         }
-        Set<Integer> budgetNumberStarts = new HashSet<>();
         var match = LABELLED.matcher(text);
         while (match.find()) {
-            budgetNumberStarts.add(match.start(2));
             String field = match.group(1).equals("보증금") ? "maxDeposit" : "maxRent";
             // 같은 항목의 여러 금액은 순서로 상한을 정하지 않는다.
             if (tokens.containsKey(field)) {
@@ -35,16 +36,11 @@ final class BudgetInputPolicy {
             }
             tokens.put(field, new String[] {match.group(2), match.group(3)});
         }
-        // 이름 붙은 금액 외에 숫자가 더 있으면 현재 지출과 희망 예산 등의 관계를 AI가 판단한다.
-        // 서버가 문장 일부의 숫자로 최종 추출값을 덮어쓰지 않는다.
-        var numbers = Pattern.compile(NUMBER).matcher(text);
-        if (!tokens.isEmpty()) {
-            while (numbers.find()) {
-                if (!budgetNumberStarts.contains(numbers.start())) {
-                    return new Result(extraction.maxDeposit(), extraction.maxRent(), Set.of(), List.of(),
-                            correctionNotices(text, extraction));
-                }
-            }
+        // 금액과 단순 요청 표현만 있는 문장에만 서버 단위 규칙을 적용한다.
+        // 현재 지출 설명·한글 금액·삭제 등 의미가 필요한 문장은 AI 결과를 보존한다.
+        if (!tokens.isEmpty() && !SIMPLE_REMAINDER.matcher(LABELLED.matcher(text).replaceAll("")).matches()) {
+            return new Result(extraction.maxDeposit(), extraction.maxRent(), Set.of(), List.of(),
+                    correctionNotices(text, extraction));
         }
         var bare = BARE.matcher(text);
         String field = question.contains("보증금") && !question.contains("월세") ? "maxDeposit"
